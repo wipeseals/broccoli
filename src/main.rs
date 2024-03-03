@@ -1,6 +1,8 @@
 #![no_std]
 #![no_main]
 
+mod nandio;
+
 use bsp::entry;
 use defmt::*;
 use defmt_rtt as _;
