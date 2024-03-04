@@ -1,4 +1,4 @@
-use rp_pico::hal::gpio::{AnyPin, DynFunction, DynPinId, DynPullType, Pin, PinGroup};
+
 
 /// AC Characteristicsの要素定義
 /// TODO: ns以外の考慮が必要ならu32固定やめるマクロ作る

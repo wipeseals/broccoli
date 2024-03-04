@@ -3,7 +3,7 @@
 
 mod nandio;
 
-use bsp::{entry, hal::gpio::PinGroup};
+use bsp::{entry};
 use defmt::*;
 use defmt_rtt as _;
 use embedded_hal::digital::v2::{InputPin, OutputPin};
@@ -99,7 +99,7 @@ fn main() -> ! {
         .gpio11
         .into_push_pull_output_in_state(bsp::hal::gpio::PinState::Low);
     // /WP: Write Protect
-    let mut wpb_pin = pins
+    let _wpb_pin = pins
         .gpio12
         .into_push_pull_output_in_state(bsp::hal::gpio::PinState::Low);
     // /WE: Write Enable
@@ -111,7 +111,7 @@ fn main() -> ! {
         .gpio14
         .into_push_pull_output_in_state(bsp::hal::gpio::PinState::High);
     // RY / /BY: Read/Busy
-    let mut rbb_pin = pins.gpio15.into_pull_up_input();
+    let _rbb_pin = pins.gpio15.into_pull_up_input();
     delay.delay_ms(1);
 
     ////////////////////////////////
@@ -164,14 +164,14 @@ fn main() -> ! {
 
     ////////////////////////////////
     // ready for dataread (/RE = Low & IO dir = Input)
-    let mut io0_pin = io0_pin.into_pull_down_input();
-    let mut io1_pin = io1_pin.into_pull_down_input();
-    let mut io2_pin = io2_pin.into_pull_down_input();
-    let mut io3_pin = io3_pin.into_pull_down_input();
-    let mut io4_pin = io4_pin.into_pull_down_input();
-    let mut io5_pin = io5_pin.into_pull_down_input();
-    let mut io6_pin = io6_pin.into_pull_down_input();
-    let mut io7_pin = io7_pin.into_pull_down_input();
+    let io0_pin = io0_pin.into_pull_down_input();
+    let io1_pin = io1_pin.into_pull_down_input();
+    let io2_pin = io2_pin.into_pull_down_input();
+    let io3_pin = io3_pin.into_pull_down_input();
+    let io4_pin = io4_pin.into_pull_down_input();
+    let io5_pin = io5_pin.into_pull_down_input();
+    let io6_pin = io6_pin.into_pull_down_input();
+    let io7_pin = io7_pin.into_pull_down_input();
 
     cle_pin.set_state(bsp::hal::gpio::PinState::Low).unwrap();
 
