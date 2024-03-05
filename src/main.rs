@@ -3,7 +3,7 @@
 
 mod nandio;
 
-use bsp::{entry};
+use bsp::entry;
 use defmt::*;
 use defmt_rtt as _;
 use embedded_hal::digital::v2::{InputPin, OutputPin};

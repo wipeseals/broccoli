@@ -1,7 +1,6 @@
-
-
 /// AC Characteristicsの要素定義
 /// TODO: ns以外の考慮が必要ならu32固定やめるマクロ作る
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
 struct Timing {
     pub min_ns: Option<u32>,
@@ -9,6 +8,7 @@ struct Timing {
 }
 
 /// AC Characteristics定義
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
 struct TimingSpec {
     /// t_CLS
