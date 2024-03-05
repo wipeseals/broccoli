@@ -63,17 +63,71 @@ fn main() -> ! {
     delay.delay_ms(1000);
     info!("== broccoli ==");
 
-    // pio program
+    // == pio program ==
+    //
+    // -- pins <-> gpio --
+    // base + 00: io0
+    // base + 01: io1
+    // base + 02: io2
+    // base + 03: io3
+    // base + 04: io4
+    // base + 05: io5
+    // base + 06: io6
+    // base + 07: io7
+    // base + 08: ceb0
+    // base + 09: ceb1
+    // base + 10: cle
+    // base + 11: ale
+    // base + 12: wpb
+    // base + 13: web
+    // base + 14: reb
+    // base + 15: rbb
+    //
+    // -- datain --
+    // config                       : u32   : scratchXで保持. {bit31~bit4=reserved, bit3=完了時IRQ発生, bit2=transfer_count分完了したらNOP loopにする, bit1=pin入力値をFIFO出力する, bit0=RBB Highを待つ}
+    // transfer_count               : u32   : scratchYで保持. ループカウントにする
+    // pindir                       : u32   : bit15~0をpindirsに設定. bit31~16は実質reserved
+    // pinout0, pinout1 ...         : [u32] : stage0_count数分だけ出力pinに流し込む。ceb0~rbb含む(rbbは使わないと思う)
+    //                              :       : 全シーケンス完了後、現在の状態を保持したままstage_count入力状態に戻るので継続動作可
     const MAX_DELAY: u8 = 31;
     let mut assembler = pio::Assembler::<32>::new();
-    let mut wrap_target = assembler.label();
-    let mut wrap_source = assembler.label();
-    assembler.set(pio::SetDestination::PINDIRS, 1);
-    assembler.bind(&mut wrap_target);
+    let mut label_configure = assembler.label();
+    let mut label_wrap_target = assembler.label();
+    let mut label_wrap_source = assembler.label();
+
+    assembler.bind(&mut label_configure);
+    // TX FIFO -> OSR (Output Shift Register): config
+    assembler.pull(true, true);
+    // OSR -> X: config
+    assembler.mov(
+        pio::MovDestination::X,
+        pio::MovOperation::None,
+        pio::MovSource::OSR,
+    );
+    // TX FIFO -> OSR: transfer_count
+    assembler.pull(true, true);
+    // OSR -> Y: transfer_count
+    assembler.mov(
+        pio::MovDestination::Y,
+        pio::MovOperation::None,
+        pio::MovSource::OSR,
+    );
+    // TX FIFO -> OSR: pindir
+    assembler.pull(true, true);
+    assembler.out(pio::OutDestination::PINDIRS, 32); // movだとPINDIRS選べない、setは使える即値のbitwidth足りない
+
+    // TODO: ループしてbitbang設定しつつデータ読み出したり
+
+    // TODO: 終了処理
+
+    assembler.set(pio::SetDestination::PINDIRS, 0xff);
     assembler.set_with_delay(pio::SetDestination::PINS, 0, MAX_DELAY);
     assembler.set_with_delay(pio::SetDestination::PINS, 1, MAX_DELAY);
-    assembler.bind(&mut wrap_source);
-    let program = assembler.assemble_with_wrap(wrap_source, wrap_target);
+    // read data
+    // NOP
+    assembler.bind(&mut label_wrap_target);
+    assembler.bind(&mut label_wrap_source);
+    let program = assembler.assemble_with_wrap(label_wrap_source, label_wrap_target);
 
     // run pio0
     let (mut pio, sm0, _, _, _) = pac.PIO0.split(&mut pac.RESETS);
@@ -260,6 +314,10 @@ fn main() -> ! {
     // }
 
     loop {
+        // pio
+        cortex_m::asm::wfi();
+
+        // cpu
         // led_pin.set_high().unwrap();
         // delay.delay_ms(1000);
         // led_pin.set_low().unwrap();
