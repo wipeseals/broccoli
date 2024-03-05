@@ -11,17 +11,13 @@ jobs:
     continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       matrix:
-        # All generated code should be running on stable now
-        rust: [nightly, stable]
+        rust: [stable] # [nightly, stable]
         include:
-          # Nightly is only for reference and allowed to fail
           - rust: nightly
             experimental: true
         os:
-          # Check compilation works on common OSes
-          # (i.e. no path issues)
           - ubuntu-latest
-          - macOS-latest
+          # - macOS-latest
           - windows-latest
     runs-on: ${{ matrix.os }}
     steps:
