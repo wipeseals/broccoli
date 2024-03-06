@@ -82,51 +82,125 @@ fn main() -> ! {
     // base + 13: web
     // base + 14: reb
     // base + 15: rbb
+    // ...
+    // base + 25: LED
     //
     // -- datain --
-    // config                       : u32   : scratchXで保持. {bit31~bit4=reserved, bit3=完了時IRQ発生, bit2=transfer_count分完了したらNOP loopにする, bit1=pin入力値をFIFO出力する, bit0=RBB Highを待つ}
-    // transfer_count               : u32   : scratchYで保持. ループカウントにする
-    // pindir                       : u32   : bit15~0をpindirsに設定. bit31~16は実質reserved
-    // pinout0, pinout1 ...         : [u32] : stage0_count数分だけ出力pinに流し込む。ceb0~rbb含む(rbbは使わないと思う)
-    //                              :       : 全シーケンス完了後、現在の状態を保持したままstage_count入力状態に戻るので継続動作可
-    const MAX_DELAY: u8 = 31;
+    // wait_rbb                     : u32   : scratchYで保持. 1:RBB Highを待つ, 0: RBB Highを待たない
+    // pin_dir                      : u32   : bit15~0をpin_dirsに設定.bit15はRBBなのでLow(Input)固定. bit31~16は実質reserved
+    // transfer_count               : u32   : scratchXで保持. ループカウント-1を設定。 (post-decrent由来)
+    // pinout0, pinout1 ...         : [u32] : transfer_count数分だけ出力pinに流し込む。ceb0~rbb含む(入力ピンは実質無効)
+    //                              :       : 全シーケンス完了後、現在の状態を保持したまま先頭に戻るので継続動作可
+    const IO0_PIN: u32 = 0;
+    const IO1_PIN: u32 = 1;
+    const IO2_PIN: u32 = 2;
+    const IO3_PIN: u32 = 3;
+    const IO4_PIN: u32 = 4;
+    const IO5_PIN: u32 = 5;
+    const IO6_PIN: u32 = 6;
+    const IO7_PIN: u32 = 7;
+    const CEB0_PIN: u32 = 8;
+    const CEB1_PIN: u32 = 9;
+    const CLE_PIN: u32 = 10;
+    const ALE_PIN: u32 = 11;
+    const WPB_PIN: u32 = 12;
+    const WEB_PIN: u32 = 13;
+    const REB_PIN: u32 = 14;
+    const RBB_PIN: u32 = 15;
+    const LED_PIN: u32 = 25;
+    const IRQ_INDEX: u8 = 0;
     let mut assembler = pio::Assembler::<32>::new();
-    let mut label_configure = assembler.label();
+    let mut label_wait_rbb = assembler.label();
+    let mut label_start_transfer = assembler.label();
+    let mut label_loop_transfer = assembler.label();
+    let mut label_end_transfer = assembler.label();
     let mut label_wrap_target = assembler.label();
     let mut label_wrap_source = assembler.label();
 
-    assembler.bind(&mut label_configure);
-    // TX FIFO -> OSR (Output Shift Register): config
+    ////////////////////////////////////////////////////
+    // start
+    assembler.bind(&mut label_wrap_target);
+
+    ////////////////////////////////////////////////////
+    // wait rbb
+
+    // RBB待たない場合のフラグをFIFOから持ってきて初回判定とする
+    // TX FIFO -> OSR (Output Shift Register): wait_rbb
     assembler.pull(true, true);
-    // OSR -> X: config
-    assembler.mov(
-        pio::MovDestination::X,
-        pio::MovOperation::None,
-        pio::MovSource::OSR,
-    );
-    // TX FIFO -> OSR: transfer_count
-    assembler.pull(true, true);
-    // OSR -> Y: transfer_count
+    // OSR -> Y: wait_rbb
     assembler.mov(
         pio::MovDestination::Y,
         pio::MovOperation::None,
         pio::MovSource::OSR,
     );
-    // TX FIFO -> OSR: pindir
+
+    // 初回Skip, 2回目以後のRBB監視ループ
+    assembler.bind(&mut label_wait_rbb);
+    // check (1st=wait_rbb, 2nd/3rd/...=~pins[15])
+    assembler.jmp(pio::JmpCondition::YIsZero, &mut label_start_transfer);
+    // clear flag
+    assembler.mov(
+        pio::MovDestination::Y,
+        pio::MovOperation::None,
+        pio::MovSource::NULL,
+    );
+    // pins -> OSR
+    assembler.mov(
+        pio::MovDestination::OSR,
+        pio::MovOperation::Invert, // RBB=1でReadyだが、jmpはXisZero判定で抜けるので反転入力
+        pio::MovSource::PINS,
+    );
+    // (OSR >> 15) & 0x1をXに代入。 OSR >> 15 したあとに1bit転送
+    assembler.out(pio::OutDestination::NULL, (RBB_PIN as u8) - 1);
+    assembler.out(pio::OutDestination::X, 1);
+
+    ////////////////////////////////////////////////////
+    // transfer data
+    assembler.bind(&mut label_start_transfer);
+
+    // 転送数設定
+    // TX FIFO -> OSR: transfer_count
     assembler.pull(true, true);
+    // OSR -> X: transfer_count
+    assembler.mov(
+        pio::MovDestination::X,
+        pio::MovOperation::None,
+        pio::MovSource::OSR,
+    );
+
+    // pin設定
+    // TX FIFO -> OSR: pin_dir
+    assembler.pull(true, true);
+    // OSR -> PINDIRS: pin_dir
     assembler.out(pio::OutDestination::PINDIRS, 32); // movだとPINDIRS選べない、setは使える即値のbitwidth足りない
 
-    // TODO: ループしてbitbang設定しつつデータ読み出したり
+    // 送受信ループ
+    assembler.bind(&mut label_loop_transfer);
+    // TX FIFO -> OSR: out_data[N]
+    assembler.pull(true, true);
+    // OSR -> pins: out_data[N]
+    assembler.mov(
+        pio::MovDestination::PINS,
+        pio::MovOperation::None,
+        pio::MovSource::OSR,
+    );
+    // pins -> ISR: in_data[N]
+    assembler.mov(
+        pio::MovDestination::ISR,
+        pio::MovOperation::None,
+        pio::MovSource::PINS,
+    );
+    // ISR -> RX FIFO: in_data[N]
+    assembler.push(true, true);
+    // loop count & loop
+    assembler.jmp(pio::JmpCondition::XDecNonZero, &mut label_loop_transfer);
 
-    // TODO: 終了処理
-
-    assembler.set(pio::SetDestination::PINDIRS, 0xff);
-    assembler.set_with_delay(pio::SetDestination::PINS, 0, MAX_DELAY);
-    assembler.set_with_delay(pio::SetDestination::PINS, 1, MAX_DELAY);
-    // read data
-    // NOP
-    assembler.bind(&mut label_wrap_target);
+    // 終了処理
+    assembler.bind(&mut label_end_transfer);
+    // 割り込み通知
+    assembler.irq(false, false, IRQ_INDEX, false);
     assembler.bind(&mut label_wrap_source);
+
     let program = assembler.assemble_with_wrap(label_wrap_source, label_wrap_target);
 
     // run pio0
@@ -134,10 +208,85 @@ fn main() -> ! {
     let installed = pio.install(&program).unwrap();
     let (int, frac) = (0, 0);
     let (sm, _, _) = PIOBuilder::from_program(installed)
-        .set_pins(led_pin.id().num, 1)
+        .set_pins(led_pin.id().num, 1) // TODO:ピン設定とRBBのInternal Pulldown
         .clock_divisor_fixed_point(int, frac)
         .build(sm0);
     sm.start();
+
+    // | 31  | 30  | 29  | 28  | 27  | 26  | 25  | 24  | 23  | 22  | 21  | 20  | 19  | 18  | 17  | 16  | 15  | 14  | 13  | 12  | 11  | 10  | 9    | 8    | 7   | 6   | 5   | 4   | 3   | 2   | 1   | 0   |
+    // | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---- | ---- | --- | --- | --- | --- | --- | --- | --- | --- |
+    // | --  | --  | --  | --  | --  | --  | led | --  | --  | --  | --  | --  | --  | --  | --  | --  | rbb | reb | web | wpb | ale | cle | ceb1 | ceb0 | io7 | io6 | io5 | io4 | io3 | io2 | io1 | io0 |
+
+    // 指定したbitだけ1の値
+    let bit_on = |bit_pos: u32| (0x01u32 << bit_pos);
+
+    // RBB以外全部Output
+    let write_pin_dir = bit_on(LED_PIN)
+        | bit_on(REB_PIN)
+        | bit_on(WEB_PIN)
+        | bit_on(WPB_PIN)
+        | bit_on(ALE_PIN)
+        | bit_on(CLE_PIN)
+        | bit_on(CEB1_PIN)
+        | bit_on(CEB0_PIN)
+        | bit_on(IO7_PIN)
+        | bit_on(IO6_PIN)
+        | bit_on(IO5_PIN)
+        | bit_on(IO4_PIN)
+        | bit_on(IO3_PIN)
+        | bit_on(IO2_PIN)
+        | bit_on(IO1_PIN)
+        | bit_on(IO0_PIN);
+    // RBB,IO以外Output
+    let read_pin_dir = bit_on(LED_PIN)
+        | bit_on(REB_PIN)
+        | bit_on(WEB_PIN)
+        | bit_on(WPB_PIN)
+        | bit_on(ALE_PIN)
+        | bit_on(CLE_PIN)
+        | bit_on(CEB1_PIN)
+        | bit_on(CEB0_PIN);
+    // Assert=/WP, Negate=/CS,/RE,/WE,/CLE,ALE,
+    let init_pin_state = bit_on(REB_PIN) | bit_on(WEB_PIN) | bit_on(CEB1_PIN) | bit_on(CEB0_PIN);
+    // CS0, CS1設定
+    let access_to_cs0 = true;
+    let (en_cs_pin, dis_cs_pin) = if access_to_cs0 {
+        (CEB0_PIN, CEB1_PIN)
+    } else {
+        (CEB1_PIN, CEB0_PIN)
+    };
+    const READ_ID_CMD: u32 = 0x90;
+    const READ_ID_ADDRESS: u32 = 0x00;
+
+    let read_id_seq = [
+        // send cmd & address
+        0x00000000u32,  // wait_rbb
+        write_pin_dir,  // pin_dir
+        5u32,           // transfer_count
+        init_pin_state, // data00: init
+        bit_on(dis_cs_pin) | bit_on(REB_PIN) | bit_on(CLE_PIN) | bit_on(LED_PIN) | READ_ID_CMD, //data01: set cmd
+        bit_on(dis_cs_pin) | bit_on(REB_PIN) | bit_on(CLE_PIN) | bit_on(WEB_PIN) | READ_ID_CMD, //data02: posedge /WE with CLE
+        bit_on(dis_cs_pin) | bit_on(REB_PIN) | bit_on(ALE_PIN) | bit_on(LED_PIN) | READ_ID_ADDRESS, //data03: set address
+        bit_on(dis_cs_pin) | bit_on(REB_PIN) | bit_on(ALE_PIN) | bit_on(WEB_PIN) | READ_ID_ADDRESS, //data04: posedge /WE with ALE
+        // read data
+        0x00000000u32,                                          // wait_rbb
+        read_pin_dir,                                           // pin_dir
+        13u32,                                                  // transfer_count
+        bit_on(dis_cs_pin) | bit_on(WEB_PIN) | bit_on(LED_PIN), //data00: /RE=0
+        bit_on(dis_cs_pin) | bit_on(WEB_PIN) | bit_on(REB_PIN), //data01: posedge /RE for d0
+        bit_on(dis_cs_pin) | bit_on(WEB_PIN) | bit_on(LED_PIN), //data02: /RE=0
+        bit_on(dis_cs_pin) | bit_on(WEB_PIN) | bit_on(REB_PIN), //data03: posedge /RE for d1
+        bit_on(dis_cs_pin) | bit_on(WEB_PIN) | bit_on(LED_PIN), //data04: /RE=0
+        bit_on(dis_cs_pin) | bit_on(WEB_PIN) | bit_on(REB_PIN), //data05: posedge /RE for d2
+        bit_on(dis_cs_pin) | bit_on(WEB_PIN) | bit_on(LED_PIN), //data06: /RE=0
+        bit_on(dis_cs_pin) | bit_on(WEB_PIN) | bit_on(REB_PIN), //data07: posedge /RE for d3
+        bit_on(dis_cs_pin) | bit_on(WEB_PIN) | bit_on(LED_PIN), //data08: /RE=0
+        bit_on(dis_cs_pin) | bit_on(WEB_PIN) | bit_on(REB_PIN), //data09: posedge /RE for d4
+        bit_on(dis_cs_pin) | bit_on(WEB_PIN) | bit_on(LED_PIN), //data10: /RE=0
+        bit_on(dis_cs_pin) | bit_on(WEB_PIN) | bit_on(REB_PIN), //data11: posedge /RE for d5
+        init_pin_state,                                         // data12: finalize
+    ];
+
     // //////////////////////////
     // // pin assign & init
     // // IO: I/O Port 0~7
@@ -316,12 +465,6 @@ fn main() -> ! {
     loop {
         // pio
         cortex_m::asm::wfi();
-
-        // cpu
-        // led_pin.set_high().unwrap();
-        // delay.delay_ms(1000);
-        // led_pin.set_low().unwrap();
-        // delay.delay_ms(1000);
     }
 }
 
