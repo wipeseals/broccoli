@@ -1,3 +1,25 @@
+# broccoli
+
+Toy USB Massstorage device running on raspberry pi pico implemented in Rust.
+
+## Features
+
+TODO:
+
+## Getting Started
+
+TODO:
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more information.
+
+## Contact
+
+For any inquiries or questions, you can reach out to the project maintainer at [wipeseals@gmail.com](mailto:wipeseals@gmail.com).
+
+---
+
 # Project template for rp2040-hal
 
 This template is intended as a starting point for developing your own firmware based on the rp2040-hal.
