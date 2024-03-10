@@ -5,6 +5,7 @@ This template is intended as a starting point for developing your own firmware b
 It includes all of the `knurling-rs` tooling as showcased in https://github.com/knurling-rs/app-template (`defmt`, `defmt-rtt`, `panic-probe`, `flip-link`) to make development as easy as possible.
 
 `probe-rs` is configured as the default runner, so you can start your program as easy as
+
 ```sh
 cargo run --release
 ```
@@ -63,10 +64,10 @@ cargo install probe-rs --features=cli --locked
 # If you want to use elf2uf2-rs instead, do...
 cargo install elf2uf2-rs --locked
 ```
-If you get the error ``binary `cargo-embed` already exists`` during installation of probe-rs, run `cargo uninstall cargo-embed` to uninstall your older version of cargo-embed before trying again.
+
+If you get the error `` binary `cargo-embed` already exists `` during installation of probe-rs, run `cargo uninstall cargo-embed` to uninstall your older version of cargo-embed before trying again.
 
 </details>
-
 
 <!-- Running -->
 <details open="open">
@@ -83,36 +84,47 @@ cargo run --release
 
 If you do not specify a DEFMT_LOG level, it will be set to `debug`.
 That means `println!("")`, `info!("")` and `debug!("")` statements will be printed.
-If you wish to override this, you can change it in `.cargo/config.toml` 
+If you wish to override this, you can change it in `.cargo/config.toml`
+
 ```toml
 [env]
 DEFMT_LOG = "off"
 ```
-You can also set this inline (on Linux/MacOS)  
+
+You can also set this inline (on Linux/MacOS)
+
 ```sh
 DEFMT_LOG=trace cargo run
 ```
 
 or set the _environment variable_ so that it applies to every `cargo run` call that follows:
+
 #### Linux/MacOS/unix
+
 ```sh
 export DEFMT_LOG=trace
 ```
 
 Setting the DEFMT_LOG level for the current session  
 for bash
+
 ```sh
 export DEFMT_LOG=trace
 ```
 
 #### Windows
+
 Windows users can only override DEFMT_LOG through `config.toml`
 or by setting the environment variable as a separate step before calling `cargo run`
+
 - cmd
+
 ```cmd
 set DEFMT_LOG=trace
 ```
+
 - powershell
+
 ```ps1
 $Env:DEFMT_LOG = trace
 ```
@@ -126,54 +138,56 @@ cargo run
 <details open="open">
   <summary><h2 style="display: inline-block" id="alternative-runners">Alternative runners</h2></summary>
 
-If you don't have a debug probe or if you want to do interactive debugging you can set up an alternative runner for cargo.  
+If you don't have a debug probe or if you want to do interactive debugging you can set up an alternative runner for cargo.
 
 Some of the options for your `runner` are listed below:
 
-* **`cargo embed`**
+- **`cargo embed`**
   This is basically a more configurable version of `probe-rs run`, our default runner.
   See [the `cargo-embed` tool docs page](https://probe.rs/docs/tools/cargo-embed/) for
   more information.
-  
-  *Step 1* - Install `cargo-embed`. This is part of the [`probe-rs`](https://crates.io/crates/probe-rs) tools:
+
+  _Step 1_ - Install `cargo-embed`. This is part of the [`probe-rs`](https://crates.io/crates/probe-rs) tools:
 
   ```console
   $ cargo install probe-rs --features=cli --locked
   ```
 
-  *Step 2* - Update settings in [Embed.toml](./Embed.toml)  
-  - The defaults are to flash, reset, and start a defmt logging session
-  You can find all the settings and their meanings [in the probe-rs repo](https://github.com/probe-rs/probe-rs/blob/c0610e98008cbb34d0dc056fcddff0f2d4f50ad5/probe-rs/src/bin/probe-rs/cmd/cargo_embed/config/default.toml)
+  _Step 2_ - Update settings in [Embed.toml](./Embed.toml)
 
-  *Step 3* - Use the command `cargo embed`, which will compile the code, flash the device
+  - The defaults are to flash, reset, and start a defmt logging session
+    You can find all the settings and their meanings [in the probe-rs repo](https://github.com/probe-rs/probe-rs/blob/c0610e98008cbb34d0dc056fcddff0f2d4f50ad5/probe-rs/src/bin/probe-rs/cmd/cargo_embed/config/default.toml)
+
+  _Step 3_ - Use the command `cargo embed`, which will compile the code, flash the device
   and start running the configuration specified in Embed.toml
 
   ```console
   $ cargo embed --release
   ```
 
-* **probe-rs-debugger**
-  *Step 1* - Install Visual Studio Code from https://code.visualstudio.com/
+- **probe-rs-debugger**
+  _Step 1_ - Install Visual Studio Code from https://code.visualstudio.com/
 
-  *Step 2* - Install `probe-rs`
+  _Step 2_ - Install `probe-rs`
+
   ```console
   $ cargo install probe-rs --features=cli --locked
   ```
 
-  *Step 3* - Open this project in VSCode
+  _Step 3_ - Open this project in VSCode
 
-  *Step 4* - Install `debugger for probe-rs` via the VSCode extensions menu (View > Extensions)
+  _Step 4_ - Install `debugger for probe-rs` via the VSCode extensions menu (View > Extensions)
 
-  *Step 5* - Launch a debug session by choosing `Run`>`Start Debugging` (or press F5)
+  _Step 5_ - Launch a debug session by choosing `Run`>`Start Debugging` (or press F5)
 
-* **Loading a UF2 over USB**  
-  *Step 1* - Install [`elf2uf2-rs`](https://github.com/JoNil/elf2uf2-rs):
+- **Loading a UF2 over USB**  
+  _Step 1_ - Install [`elf2uf2-rs`](https://github.com/JoNil/elf2uf2-rs):
 
   ```console
   $ cargo install elf2uf2-rs --locked
   ```
 
-  *Step 2* - Modify `.cargo/config` to change the default runner
+  _Step 2_ - Modify `.cargo/config` to change the default runner
 
   ```toml
   [target.`cfg(all(target-arch = "arm", target_os = "none"))`]
@@ -184,11 +198,11 @@ Some of the options for your `runner` are listed below:
   by default in the template files, but may also be replaced by
   `thumbv6m-none-eabi`.
 
-  *Step 3* - Boot your RP2040 into "USB Bootloader mode", typically by rebooting
+  _Step 3_ - Boot your RP2040 into "USB Bootloader mode", typically by rebooting
   whilst holding some kind of "Boot Select" button. On Linux, you will also need
   to 'mount' the device, like you would a USB Thumb Drive.
 
-  *Step 4* - Use `cargo run`, which will compile the code and start the
+  _Step 4_ - Use `cargo run`, which will compile the code and start the
   specified 'runner'. As the 'runner' is the `elf2uf2-rs` tool, it will build a UF2
   file and copy it to your RP2040.
 
@@ -196,7 +210,7 @@ Some of the options for your `runner` are listed below:
   $ cargo run --release
   ```
 
-* **Loading with picotool**  
+- **Loading with picotool**  
   As ELF files produced by compiling Rust code are completely compatible with ELF
   files produced by compiling C or C++ code, you can also use the Raspberry Pi
   tool [picotool](https://github.com/raspberrypi/picotool). The only thing to be
@@ -216,16 +230,17 @@ Some of the options for your `runner` are listed below:
 <details open="open">
   <summary><h2 style="display: inline-block" id="notes-on-using-rp2040_boot2">Notes on using rp2040_boot2</h2></summary>
 
-  The second-stage boot loader must be written to the .boot2 section. That
-  is usually handled by the board support package (e.g.`rp-pico`). If you don't use
-  one, you should initialize the boot loader manually. This can be done by adding the
-  following to the beginning of main.rs:
-  ```rust
-  use rp2040_boot2;
-  #[link_section = ".boot2"]
-  #[used]
-  pub static BOOT_LOADER: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
-  ```
+The second-stage boot loader must be written to the .boot2 section. That
+is usually handled by the board support package (e.g.`rp-pico`). If you don't use
+one, you should initialize the boot loader manually. This can be done by adding the
+following to the beginning of main.rs:
+
+```rust
+use rp2040_boot2;
+#[link_section = ".boot2"]
+#[used]
+pub static BOOT_LOADER: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
+```
 
 </details>
 
@@ -233,12 +248,14 @@ Some of the options for your `runner` are listed below:
 <details open="open">
   <summary><h2 style="display: inline-block" id="feature-flags">Feature flags</h2></summary>
 
-  There are several [feature flags in rp2040-hal](https://docs.rs/rp2040-hal/latest/rp2040_hal/#crate-features).
-  If you want to enable some of them, uncomment the `rp2040-hal` dependency in `Cargo.toml` and add the
-  desired feature flags there. For example, to enable ROM functions for f64 math using the feature `rom-v2-intrinsics`:
-  ```
-  rp2040-hal = { version="0.9", features=["rt", "critical-section-impl", "rom-v2-intrinsics"] }
-  ```
+There are several [feature flags in rp2040-hal](https://docs.rs/rp2040-hal/latest/rp2040_hal/#crate-features).
+If you want to enable some of them, uncomment the `rp2040-hal` dependency in `Cargo.toml` and add the
+desired feature flags there. For example, to enable ROM functions for f64 math using the feature `rom-v2-intrinsics`:
+
+```
+rp2040-hal = { version="0.9", features=["rt", "critical-section-impl", "rom-v2-intrinsics"] }
+```
+
 </details>
 
 <!-- ROADMAP -->
