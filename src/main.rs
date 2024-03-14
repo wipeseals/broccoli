@@ -104,40 +104,15 @@ pub enum NandPinAssign {
 ///
 /// ## Command Description
 ///
-/// - PinDir arg0
-///   - arg0: u32 Pin direction
-/// - PinInit arg0
-///  - arg0: u32 Pin output (CS0, CS1もここで決定想定)
-/// - CmdLatch arg0
-///  - arg0: u8 Command
-/// - AddrLatch arg0 arg1...
-///   - arg0: u32 Data length
-///   - arg1~: [u8] Address
-/// - WaitRbb
-///   - No arg
-/// - WriteData arg0 arg1...
-///   - arg0: u32 Data length
-///   - arg1~: [u8] Data
-/// - ReadData arg0 arg1...
-///   - arg0: u32 Data length
-///   - arg1~: [u8] Data
-/// - SendIrq arg0
-///   - arg0: u8 IRQ index
 ///
 /// ## Example
 ///
 /// - Reset
-///   - PinDir(out) -> PinInit(/CSx=Low) -> CmdLatch(0xff) -> WaitRbb -> PinInit(/CS0,/CS1=High) -> IRQ(x)
 /// - ID read
-///   - PinDir(out) -> PinInit(/CSx=Low) -> CmdLatch(0x90) -> AddrLatch(0x00) -> PinDir(in) -> ReadData(5byte(id data)) -> PinInit(/CS0,/CS1=High) -> IRQ(x)
 /// - StatusRead
-///   - PinDir(out) -> PinInit(/CSx=Low) -> CmdLatch(0x70) -> PinDir(in) -> ReadData(1byte(status)) -> PinInit -> IRQ(x)
 /// - READ
-///   - PinDir(out) -> PinInit(/CSx=Low) -> CmdLatch(0x00) -> AddrLatch(2byte(col)+2byte(page)) -> CmdLatch(0x30) -> WaitRbb -> PinDir(in) -> ReadData(2048+128byte) -> PinInit(/CS0,/CS1=High) -> IRQ(x)
 /// - Program
-///   - PinDir(out+/WP=1) -> PinInit(/CSx=Low) -> CmdLatch(0x80) -> AddrLatch(2byte(col)+2byte(page)) -> WriteData(2048+128byte) -> CmdLatch(0x10) -> WaitRbb -> CmdLatch(0x10) -> PinDir(in) -> ReadData(1byte(status)) -> PinInit(/CS0,/CS1=High) -> IRQ(x)
 /// - Erase
-///   - PinDir(out+/WP=1) -> PinInit(/CSx=Low) -> CmdLatch(0x60) -> AddrLatch(2byte(block)) -> CmdLatch(0xd0) -> WaitRbb -> <<StatusRead>> -> PinInit(/CS0,/CS1=High) -> IRQ(x)
 ///
 #[repr(u8)]
 pub enum NandPioCmd {
@@ -203,78 +178,7 @@ fn main() -> ! {
 
     ////////////////////////////////////////////////////
     assembler.bind(&mut label_wrap_target);
-    // fetch cmd -> OSR -> X
-    assembler.pull(false, true); // blocking
-    assembler.mov(
-        pio::MovDestination::X,
-        pio::MovOperation::None,
-        pio::MovSource::OSR,
-    );
 
-    let impl_nand_pio_cmd =
-        |assembler: &mut pio::Assembler<32>,
-         cmd: NandPioCmd,
-         label_end: &mut pio::Label,
-         function_body: Box<dyn FnMut(&mut pio::Assembler<32>)>| {
-            let mut label_cmdid_mismatch = assembler.label();
-
-            // set cmd -> Y
-            assembler.set(pio::SetDestination::Y, cmd as u8);
-            // if X == Y { function_body(); goto label_end; }
-            assembler.jmp(pio::JmpCondition::XNotEqualY, &mut label_cmdid_mismatch);
-            function_body(assembler);
-            assembler.jmp(pio::JmpCondition::Always, &mut label_end);
-            assembler.bind(&mut label_cmdid_mismatch);
-        };
-    impl_nand_pio_cmd(
-        &mut assembler,
-        NandPioCmd::Nop,
-        &mut label_wrap_target,
-        Box::new(|_: &mut pio::Assembler<32>| {
-            // No Operation
-        }),
-    );
-    impl_nand_pio_cmd(
-        &mut assembler,
-        NandPioCmd::PinDir,
-        &mut label_wrap_target,
-        Box::new(|_: &mut pio::Assembler<32>| {
-            // fetch arg0 -> OSR -> PINDIRS
-            assembler.pull(false, true); // blocking
-            assembler.out(pio::OutDestination::PINDIRS, 32); // mov destinationにPINDIRSがないのでoutで代用
-        }),
-    );
-    impl_nand_pio_cmd(
-        &mut assembler,
-        NandPioCmd::PinInit,
-        &mut label_wrap_target,
-        Box::new(|_: &mut pio::Assembler<32>| {
-            // fetch arg0 -> OSR -> PINS
-            assembler.pull(false, true); // blocking
-            assembler.mov(
-                pio::MovDestination::PINS,
-                pio::MovOperation::None,
-                pio::MovSource::OSR,
-            )
-        }),
-    );
-    impl_nand_pio_cmd(
-        &mut assembler,
-        NandPioCmd::PinInit,
-        &mut label_wrap_target,
-        Box::new(|_: &mut pio::Assembler<32>| {
-            // fetch arg0 -> OSR -> PINS
-            assembler.pull(false, true); // blocking
-            assembler.mov(
-                pio::MovDestination::PINS,
-                pio::MovOperation::None,
-                pio::MovSource::OSR,
-            )
-        }),
-    );
-
-    // 割り込み通知
-    assembler.irq(false, false, IRQ_INDEX, false);
     assembler.bind(&mut label_wrap_source);
 
     let program = assembler.assemble_with_wrap(label_wrap_source, label_wrap_target);
