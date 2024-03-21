@@ -1,0 +1,18 @@
+.program pio-nandio-readid
+.wrap_target
+
+setup:
+    ; tx fifo -> pindirs | x: for pindir, bitbang loop counter
+    pull block
+    out pindirs, 16
+    out x, 16
+
+bitbang_loop:
+    ; tx fifo -> pins; cmd
+    pull block
+    out pins, 16
+    out pins, 16
+    jmp x-- bitbang_loop
+
+    jmp setup; TODO: なくてもよいはずだが、ないとsim上だとbitbang_loopに戻される. wrap周りの指定が良くないかも
+.wrap
