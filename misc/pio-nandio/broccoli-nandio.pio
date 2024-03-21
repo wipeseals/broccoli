@@ -1,8 +1,15 @@
 .program broccoli-nandio
-.wrap_target
 
+; NAND IC Pinout
+; | 15  | 14  | 13  | 12  | 11  | 10  | 9    | 8    | 7   | 6   | 5   | 4   | 3   | 2   | 1   | 0   |
+; | --- | --- | --- | --- | --- | --- | ---- | ---- | --- | --- | --- | --- | --- | --- | --- | --- |
+; | rbb | reb | web | wpb | ale | cle | ceb1 | ceb0 | io7 | io6 | io5 | io4 | io3 | io2 | io1 | io0 |
+; | in  | out | out | out | out | out | out  | out  | io  | io  | io  | io  | io  | io  | io  | io  |
+
+.wrap_target
 setup:
-    ; tx fifo -> pindirs, cmd
+    ; コマンド識別
+    ; tx fifo -> pindirs, transfer_count, cmd
     ; { cmd[3:0], transfer_count[11:0], pindirs[15:0] }
     pull block
     out pindirs, 16 ; pindirs
@@ -12,30 +19,52 @@ setup:
     ; cmd dispatch
     ; jmp y--が非ゼロjmpなので、各ラベルの先頭に飛びながら処理を決定する
 
-bitbang_head:
-    jmp y--, wait_rbb_head ; cmd==0
+
+    ; tx fifoの内容をpinsに出力. transfer_count回繰り返す
+    ; arg0 = { data1[15:0], data0[15:0] }
+bitbang_setup:
+    jmp y--, wait_rbb_setup ; cmd==0
 bitbang_loop:
-    ; tx fifo -> pins
-    ; { data_high[15:0], data_low[15:0] }
-    pull block
-    out pins, 16 ; data_low
-    out pins, 16 ; data_high
+    pull block   ; arg0 -> osr
+    out pins, 16 ; osr  -> data0
+    out pins, 16 ; osr  -> data1
     jmp x-- bitbang_loop ; loop transfer_count
     jmp setup
 
-wait_rbb_head:
-    jmp y--, write_head ; cmd==1
+    ; rbb pinがHighになるまで待つ. transfer_countは無視
+wait_rbb_setup:
+    jmp y--, write_setup ; cmd==1
 wait_rbb_loop:
+    wait 1 gpio 15 ; RBB=1
     jmp setup
 
-write_head:
-    jmp y--, read_head ; cmd==2
+write_setup:
+    jmp y--, read_setup ; cmd==2
 write_loop:
     jmp setup
 
-read_head:
-    jmp y--, invalid ; cmd==3
+    ; /REをトグルさせつつpinsの内容をrx fifoに入力. transfer_count回繰り返す
+    ; 事前にbitbangでコマンドを入力したあとの最終状態で、data_read_dis 相当の pin状態. ALE==0, CLE=0, CEB0 or CEB1 = 0 を作っておくことが望ましい
+    ; pindirsではIO pinを入力に指定しておくこと
+    ; arg0 = { data_read_dis[15:0], data_read_en[15:0] }
+read_setup:
+    jmp y--, irq_setup ; cmd==3
+    pull block ; osr == arg0
+    mov y, osr ; y == osr == arg0
 read_loop:
+    out pins, 16 ; osr -> data_read_en (NAND IC: dataout)
+    out pins, 16 ; osr -> data_read_dis
+    in pins, 8   ; dataout -> isr
+    push block   ; isr -> rx fifo
+    mov osr, y   ; y -> osr (outでosrが消費されるので、arg0と同じ内容を再設定)
+    jmp x-- read_loop ; loop transfer_count
+    jmp setup
+
+    ; IRQを発生させる。完了通知用
+irq_setup:
+    jmp y--, invalid ; cmd==4
+irq_loop:
+    irq set 0
     jmp setup
 
 invalid:
