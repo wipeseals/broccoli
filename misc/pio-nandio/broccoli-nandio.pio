@@ -15,6 +15,7 @@ setup:
     out pindirs, 16 ; pindirs
     out x, 12 ; transfer_count
     out y, 4 ; cmd
+    ; TODO: 命令数足りないときはarg0ここで一律pullしてもいいかもしれない
 
     ; cmd dispatch
     ; jmp y--が非ゼロjmpなので、各ラベルの先頭に飛びながら処理を決定する
@@ -65,7 +66,7 @@ irq_setup:
     jmp y--, invalid ; cmd==4
 irq_loop:
     irq set 0
-    jmp setup
+    jmp setup ; TODO: 命令数足りない && invalidに処理を置かないなら不要
 
 invalid:
     ; cmd==invalid (.wrap_target に戻すので対応不要)
