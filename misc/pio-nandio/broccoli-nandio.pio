@@ -14,5 +14,4 @@ bitbang_loop:
     out pins, 16
     jmp x-- bitbang_loop
 
-    jmp setup; TODO: なくてもよいはずだが、ないとsim上だとbitbang_loopに戻される. wrap周りの指定が良くないかも
 .wrap
