@@ -2,16 +2,42 @@
 .wrap_target
 
 setup:
-    ; tx fifo -> pindirs | x: for pindir, bitbang loop counter
+    ; tx fifo -> pindirs, cmd
+    ; { cmd[3:0], transfer_count[11:0], pindirs[15:0] }
     pull block
-    out pindirs, 16
-    out x, 16
+    out pindirs, 16 ; pindirs
+    out x, 12 ; transfer_count
+    out y, 4 ; cmd
 
+    ; cmd dispatch
+    ; jmp y--が非ゼロjmpなので、各ラベルの先頭に飛びながら処理を決定する
+
+bitbang_head:
+    jmp y--, wait_rbb_head ; cmd==0
 bitbang_loop:
-    ; tx fifo -> pins; cmd
+    ; tx fifo -> pins
+    ; { data_high[15:0], data_low[15:0] }
     pull block
-    out pins, 16
-    out pins, 16
-    jmp x-- bitbang_loop
+    out pins, 16 ; data_low
+    out pins, 16 ; data_high
+    jmp x-- bitbang_loop ; loop transfer_count
+    jmp setup
 
+wait_rbb_head:
+    jmp y--, write_head ; cmd==1
+wait_rbb_loop:
+    jmp setup
+
+write_head:
+    jmp y--, read_head ; cmd==2
+write_loop:
+    jmp setup
+
+read_head:
+    jmp y--, invalid ; cmd==3
+read_loop:
+    jmp setup
+
+invalid:
+    ; cmd==invalid (.wrap_target に戻すので対応不要)
 .wrap
