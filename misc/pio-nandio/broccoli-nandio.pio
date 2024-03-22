@@ -28,7 +28,7 @@ bitbang_setup:
 bitbang_loop:
     pull block   ; arg0 -> osr
     out pins, 16 ; osr  -> data0
-    out pins, 16 ; osr  -> data1
+    out pins, 16 ; osr  -> data1 ; TODO: 命令数足りなければhalfbyte束ねるのを辞める
     jmp x-- bitbang_loop ; loop transfer_count
     jmp setup
 
