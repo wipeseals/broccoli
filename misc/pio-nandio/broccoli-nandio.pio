@@ -1,73 +1,159 @@
 .program broccoli-nandio
 
-; NAND IC Pinout
-; | 15  | 14  | 13  | 12  | 11  | 10  | 9    | 8    | 7   | 6   | 5   | 4   | 3   | 2   | 1   | 0   |
-; | --- | --- | --- | --- | --- | --- | ---- | ---- | --- | --- | --- | --- | --- | --- | --- | --- |
-; | rbb | reb | web | wpb | ale | cle | ceb1 | ceb0 | io7 | io6 | io5 | io4 | io3 | io2 | io1 | io0 |
-; | in  | out | out | out | out | out | out  | out  | io  | io  | io  | io  | io  | io  | io  | io  |
+; - NAND IC Pinout
+;
+; | bit                | 15  | 14  | 13  | 12  | 11  | 10  | 9    | 8    | 7   | 6   | 5   | 4   | 3   | 2   | 1   | 0   |
+; | ------------------ | --- | --- | --- | --- | --- | --- | ---- | ---- | --- | --- | --- | --- | --- | --- | --- | --- |
+; | hw: func           | rbb | reb | web | wpb | ale | cle | ceb1 | ceb0 | io7 | io6 | io5 | io4 | io3 | io2 | io1 | io0 |
+; | hw: dir            | in  | out | out | out | out | out | out  | out  | io  | io  | io  | io  | io  | io  | io  | io  |
+; | pio: pins-out      | -   | 14  | 13  | 12  | 11  | 10  | 9    | 8    | 7   | 6   | 5   | 4   | 3   | 2   | 1   | 0   |
+; | pio: pins-in       | 15  | -   | -   | -   | -   | -   | -    | -    | 7   | 6   | 5   | 4   | 3   | 2   | 1   | 0   |
+; | pio: pins-sideset  | -   | 4   | 3   | 2   | 1   | 0   | -    | -    | -   | -   | -   | -   | -   | -   | -   | -   |
+;
+; - sideset operation
+;   - cmd latch, addr latch は posedge 生成後に cle, ale を 0 に戻す想定
+;   - data output の state1 は init と同じ
+;   - data input w/o wp の state1 は init w/o wp と同じ
+;
+;  | value | description             | reb | web | wpb | ale | cle |
+;  | ----- | ----------------------- | --- | --- | --- | --- | --- |
+;  |  0    | no setup                | 0   | 0   | 0   | 0   | 0   |
+;  | 24    | init                    | 1   | 1   | 0   | 0   | 0   |
+;  |  8    | data output             | 0   | 1   | 0   | 0   | 0   |
+;  | 17    | cmd  latch state0       | 1   | 0   | 0   | 0   | 1   |
+;  | 25    | cmd  latch state1       | 1   | 1   | 0   | 0   | 1   |
+;  | 18    | addr latch state0       | 1   | 0   | 0   | 1   | 0   |
+;  | 26    | addr latch state1       | 1   | 1   | 0   | 1   | 0   |
+;  | 28    | init w/o wp             | 1   | 1   | 1   | 0   | 0   |
+;  | 20    | data input w/o wp       | 1   | 0   | 1   | 0   | 0   |
+;
+; - remark
+;   - autopush/autopull は未使用
+;   - TX/RX FIFOは束ねずDepth=4でも動作するが、可能であれば連結した方が良い
+;   - sideset と out/set が重複した場合、sidesetが優先される想定
+;   - out, in には pinctrl base は適用しない
+;   - pioの動作周波数は文集無しで1cycだと125MHz想定で8ns
+;     - dataout /RE=Lから読み取りは、データシートよりmax trea=20ns。3cyc必要
+;     - datain /WE=L+datasetからposedge発生までが、データシートよりmax tds=12ns。2cyc必要
+;     - /WE, /REの幅はそれぞれ twp=12ns, trp=12ns。2cyc必要
+;     - TODO: ALE,CLE,CS,その他満たせるかと、sidesetの修正だけで補正可能か確認。難しそうであればCLKDIVで調整
 
 .wrap_target
 setup:
-    ; コマンド識別
-    ; tx fifo -> pindirs, transfer_count, cmd
-    ; { cmd[3:0], transfer_count[11:0], pindirs[15:0] }
-    pull block
-    out pindirs, 16 ; pindirs
-    out x, 12 ; transfer_count
-    out y, 4 ; cmd
-    ; TODO: 命令数足りないときはarg0ここで一律pullしてもいいかもしれない
+    ; =========================================================================
+    ; コマンド取得
+    ; tx fifo -> pindirs, transfer_count, cmd_id
+    ; cmd_0 = { cmd_id[3:0], transfer_count[11:0], pindirs[15:0] }
+    ; cmd_1 = { specified by cmd_id }
+    ; data_0, data_1, data_2, ... : { specified by cmd_id }
+.side_set 0
+    pull block      ; txfifo -> osr  : cmd_0
+    out pindirs, 16 ; osr -> pindirs : dir
+    out x, 12       ; osr -> x       : transfer_count
+    out y, 4        ; osr -> y       : cmd_id
+    pull block      ; txfifo -> osr  : cmd_1
 
-    ; cmd dispatch
-    ; jmp y--が非ゼロjmpなので、各ラベルの先頭に飛びながら処理を決定する
-
-
-    ; tx fifoの内容をpinsに出力. transfer_count回繰り返す
-    ; arg0 = { data1[15:0], data0[15:0] }
+    ; =========================================================================
+    ; cmd_id=0: bitbang
+    ; 指定した内容をそのまま出力。ピンの処理化及びCSの設定を行う
+    ; lower/upperの2回が使えるので、init->cs, cs->initのような処理を行う想定
+    ;
+    ; cmd_1 = { pins_data1[15:0], pins_data0[15:0] }
 bitbang_setup:
-    jmp y--, wait_rbb_setup ; cmd==0
-bitbang_loop:
-    pull block   ; arg0 -> osr
-    out pins, 16 ; osr  -> data0
-    out pins, 16 ; osr  -> data1 ; TODO: 命令数足りなければhalfbyte束ねるのを辞める
-    jmp x-- bitbang_loop ; loop transfer_count
+.side_set 0
+    jmp y--, cmd_latch_setup ; cmd_id==0
+bitbang_main:
+.side_set 0
+    out pins, 16             ; osr -> pins : pins_data0
+    out pins, 16             ; osr -> pins : pins_data1
     jmp setup
 
-    ; rbb pinがHighになるまで待つ. transfer_countは無視
+    ; =========================================================================
+    ; cmd_id=1: nand cmd latch
+    ; 指定したCmdIdをCLE=1, /WE=L->H, /WP=L で出力
+    ;
+    ; cmd_1 = { nand_cmd_id[7:0] }
+cmd_latch_setup:
+.side_set 0
+    jmp y--, addr_latch_setup ; cmd_id==1
+cmd_latch_main:
+.side_set 5
+    out pins, 8 side 17       ; osr -> pins + cle=1 + /we=0 : nand_cmd_id
+    jmp setup   side 25       ;               cle=1 + /we=1 : posedge /we
+
+    ; =========================================================================
+    ; cmd_id=2: nand addr latch
+    ; 指定したaddr をALE=1, /WE=L->H, /WP=L で出力
+    ; cmd_1 以後には転送数-1を、指定された分の転送するデータを可変長に受け付ける (min=1byte)
+    ;
+    ; cmd_1 = { reserved }
+    ; data_0, data_1, data_2, ... : { addr[7:0] }
+addr_latch_setup:
+.side_set 0
+    jmp y--, invalid                ; cmd_id==2
+addr_latch_main:
+.side_set 5
+    pull block              side 18 ; txfifo -> osr       + ale=1 + /we=0 : data_0, data_1, data_2..., cmd_1は捨てられる
+    out pins, 8             side 18 ; osr -> pins         + ale=1 + /we=0 : transfer_data0, 1, 2...
+    jmp x-- addr_latch_main side 26 ; loop transfer_count + ale=1 + /we=1 : posedge /we
+    jmp setup               side 24 ;                               /we=1 : finish
+
+    ; =========================================================================
+    ; cmd_id=3: wait RBB
+    ; rbb pinがHighになるまで待つ
+    ;
+    ; cmd_1 = { reserved }
 wait_rbb_setup:
-    jmp y--, write_setup ; cmd==1
-wait_rbb_loop:
-    wait 1 gpio 15 ; RBB=1
-    jmp setup
+.side_set 0
+    jmp y--, dataout_setup ; cmd_id==3
+wait_rbb_main:
+.side_set 5
+    wait 1 gpio 15 side 24 ; wait(RBB=1) + init_pin
+    jmp setup      side 24 ;               init_pin
 
-write_setup:
-    jmp y--, read_setup ; cmd==2
-write_loop:
-    jmp setup
+    ; =========================================================================
+    ; cmd_id=4: Data Output
+    ; transfer_countに指定された回数 /RE=L->Hを繰り返し、/RE=L時に出力されたデータを、/RE=H時に読み取る
+    ; io pinの内容を読み込むため、pindirsは入力を設定する必要がある
+    ; 読み込んだデータの出力はISR->RXFIFOに行うため、RX FIFO Fullになると転送がストールする
+    ; sidesetの使い方は、AC Characteristicsを満たすために調整する
+    ;
+    ; cmd_1 = { reserved }
+dataout_setup:
+.side_set 0
+    jmp y--, irq_setup ; cmd_id==4
+dataout_main:
+.side_set 5
+    nop                     side 8  ;                       /re=0 : read ready
+    in pins, 8              side 24 ; pins -> isr           /re=1 : read data (rbbも入力pinのため、io部分だけ取得)
+    push block              side 24 ; isr  -> rxfifo      + /re=1 : push data
+    jmp x-- addr_latch_main side 24 ; loop transfer_count + /re=1
+    jmp setup               side 24 ;                       /re=1 : finish
 
-    ; /REをトグルさせつつpinsの内容をrx fifoに入力. transfer_count回繰り返す
-    ; 事前にbitbangでコマンドを入力したあとの最終状態で、data_read_dis 相当の pin状態. ALE==0, CLE=0, CEB0 or CEB1 = 0 を作っておくことが望ましい
-    ; pindirsではIO pinを入力に指定しておくこと
-    ; arg0 = { data_read_dis[15:0], data_read_en[15:0] }
-read_setup:
-    jmp y--, irq_setup ; cmd==3
-    pull block ; osr == arg0
-    mov y, osr ; y == osr == arg0
-read_loop:
-    out pins, 16 ; osr -> data_read_en (NAND IC: dataout)
-    out pins, 16 ; osr -> data_read_dis
-    in pins, 8   ; dataout -> isr
-    push block   ; isr -> rx fifo
-    mov osr, y   ; y -> osr (outでosrが消費されるので、arg0と同じ内容を再設定)
-    jmp x-- read_loop ; loop transfer_count
-    jmp setup
+    ; =========================================================================
+    ; cmd_id=5: Data Input
+    ; transfer_countに指定された回数 /WE=L->Hを繰り返し、/WE=L時に書き込むデータをセットして、/WE=H時に拉致させる
+    ; 転送するデータのTXFIFO->ISRに行うため、TXFIFO Fullになると転送がストールする
+    ;
+    ; cmd_1 = { reserved }
+datain_setup:
+.side_set 0
+    jmp y--, irq_setup ; cmd_id==4
+datain_main:
+.side_set 5
+    pull block              side 20 ; txfifo -> osr       + /we=0 + /wp=1 : transfer_data0, 1, 2...
+    out pins, 8             side 20 ; osr -> pins         + /we=0 + /wp=1 : transfer_data0, 1, 2...
+    jmp x-- addr_latch_main side 28 ; loop transfer_count + /we=1 + /wp=1 : posedge /we
+    jmp setup               side 24 ;                       /we=1 + /wp=1 : finish
 
+    ; =========================================================================
+    ; cmd_id=6: Create IRQ
     ; IRQを発生させる。完了通知用
+    ; これ以後のInvalidなcmd_idも本命令として取り扱う。命令数の節約が主な理由
+    ;
+    ; cmd_1 = { reserved }
 irq_setup:
-    jmp y--, invalid ; cmd==4
-irq_loop:
+irq_main:
+.side_set 0
     irq set 0
-    jmp setup ; TODO: 命令数足りない && invalidに処理を置かないなら不要
-
-invalid:
-    ; cmd==invalid (.wrap_target に戻すので対応不要)
 .wrap
