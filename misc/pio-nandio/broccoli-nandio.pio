@@ -55,9 +55,9 @@ setup:
     ; =========================================================================
     ; cmd_id=0: bitbang
     ; 指定した内容をそのまま出力。io/CSの設定を行う。
-    ; pins_data = pins_dataはceb0,ceb1,io7,io6,io5,io4,io3,io2,io1,io0の順になる
     ;
     ; cmd_1 = { pins_data[9:0] }
+    ;         { ceb1,ceb0,io7,io6,io5,io4,io3,io2,io1,io0 }
 bitbang_setup:
     jmp y--, cmd_latch_setup side 0b11100 ; cmd_id==0
 bitbang_main:
