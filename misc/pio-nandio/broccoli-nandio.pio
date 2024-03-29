@@ -46,11 +46,11 @@ setup:
     ; cmd_0 = { cmd_id[3:0], transfer_count[11:0], pindirs[15:0] }
     ; cmd_1 = { specified by cmd_id }
     ; data_0, data_1, data_2, ... : { specified by cmd_id }
-    pull block      side 0b11100 ; txfifo -> osr + /re=1, /we=1  : cmd_0
-    out pindirs, 16 side 0b11100 ; osr -> pindirs : dir
-    out x, 12       side 0b11100 ; osr -> x       : transfer_count
-    out y, 4        side 0b11100 ; osr -> y       : cmd_id
-    pull block      side 0b11100 ; txfifo -> osr  : cmd_1
+    pull block                   side 0b11100 ; txfifo -> osr,  /re=1, /we=1  : cmd_0
+    out pindirs, 16              side 0b11100 ; osr -> pindirs                : dir
+    out x, 12                    side 0b11100 ; osr -> x                      : transfer_count
+    out y, 4                     side 0b11100 ; osr -> y                      : cmd_id
+    pull block                   side 0b11100 ; txfifo -> osr                 : cmd_1
 
     ; =========================================================================
     ; cmd_id=0: bitbang
@@ -59,10 +59,10 @@ setup:
     ; cmd_1 = { pins_data[9:0] }
     ;         { ceb1,ceb0,io7,io6,io5,io4,io3,io2,io1,io0 }
 bitbang_setup:
-    jmp y--, cmd_latch_setup side 0b11100 ; cmd_id==0
+    jmp y--, cmd_latch_setup     side 0b11100 ; cmd_id==0
 bitbang_main:
-    out pins, 10             side 0b11100 ; osr -> pins : pins_data
-    jmp setup                side 0b11100
+    out pins, 10                 side 0b11100 ; osr -> pins : pins_data
+    jmp setup                    side 0b11100
 
     ; =========================================================================
     ; cmd_id=1: nand cmd latch
@@ -70,11 +70,11 @@ bitbang_main:
     ;
     ; cmd_1 = { nand_cmd_id[7:0] }
 cmd_latch_setup:
-    jmp y--, addr_latch_setup side 0b11100 ; cmd_id==1
+    jmp y--, addr_latch_setup    side 0b11100 ; cmd_id==1
 cmd_latch_main:
-    out pins, 8               side 0b10101 ; osr -> pins + cle=1 + /we=0 : nand_cmd_id
-    nop                       side 0b11101 ;               cle=1 + /we=0 : read ready  (t_cls=12ns)
-    jmp setup                 side 0b11101 ;               cle=1 + /we=1 : posedge /we (t_clh=5ns)
+    out pins, 8                  side 0b10101 ; osr -> pins,  cle=1, /we=0 : nand_cmd_id
+    nop                          side 0b11101 ;               cle=1, /we=0 : read ready  (t_cls=12ns)
+    jmp setup                    side 0b11101 ;               cle=1, /we=1 : posedge /we (t_clh=5ns)
 
     ; =========================================================================
     ; cmd_id=2: nand addr latch
@@ -84,12 +84,12 @@ cmd_latch_main:
     ; cmd_1 = { reserved }
     ; data_0, data_1, data_2, ... : { addr[7:0] }
 addr_latch_setup:
-    jmp y--, invalid        side 0b11100 ; cmd_id==2
+    jmp y--, dataout_setup       side 0b11100 ; cmd_id==2
 addr_latch_main:
-    pull block              side 0b10110 ; txfifo -> osr       + ale=1 + /we=0 : data_0, data_1, data_2..., cmd_1は捨てられる
-    out pins, 8             side 0b10110 ; osr -> pins         + ale=1 + /we=0 : transfer_data0, 1, 2... (t_als=12ns)
-    jmp x-- addr_latch_main side 0b11110 ; loop transfer_count + ale=1 + /we=1 : posedge /we             (t_alh=5ns)
-    jmp setup               side 0b11100 ;                               /we=1 : finish
+    pull block                   side 0b10110 ; txfifo -> osr       + ale=1 + /we=0 : data_0, data_1, data_2..., cmd_1は捨てられる
+    out pins, 8                  side 0b10110 ; osr -> pins         + ale=1 + /we=0 : transfer_data0, 1, 2... (t_als=12ns)
+    jmp x-- addr_latch_main      side 0b11110 ; loop transfer_count + ale=1 + /we=1 : posedge /we             (t_alh=5ns)
+    jmp setup                    side 0b11100 ;                               /we=1 : finish
 
     ; =========================================================================
     ; cmd_id=3: Data Output
@@ -100,14 +100,14 @@ addr_latch_main:
     ;
     ; cmd_1 = { reserved }
 dataout_setup:
-    jmp y--, irq_setup      side 0b11100 ; cmd_id==3
+    jmp y--, datain_setup        side 0b11100 ; cmd_id==3
 dataout_main:
-    nop                     side 0b01100 ;                       /re=0 : read ready
-    nop                     side 0b01100 ;                       /re=0 : read ready (t_rp=12ns)
-    in pins, 8              side 0b11100 ; pins -> isr           /re=1 : read data (rbbも入力pinのため、io部分だけ取得)
-    push block              side 0b11100 ; isr  -> rxfifo      + /re=1 : push data
-    jmp x-- addr_latch_main side 0b11100 ; loop transfer_count + /re=1
-    jmp setup               side 0b11100 ;                       /re=1 : finish
+    nop                          side 0b01100 ;                       /re=0 : read ready
+    nop                          side 0b01100 ;                       /re=0 : read ready (t_rp=12ns)
+    in pins, 8                   side 0b11100 ; pins -> isr           /re=1 : read data (rbbも入力pinのため、io部分だけ取得)
+    push block                   side 0b11100 ; isr  -> rxfifo      + /re=1 : push data
+    jmp x-- addr_latch_main      side 0b11100 ; loop transfer_count + /re=1
+    jmp setup                    side 0b11100 ;                       /re=1 : finish
 
     ; =========================================================================
     ; cmd_id=4: Data Input
@@ -123,16 +123,22 @@ datain_main:
     jmp x-- addr_latch_main      side 0b11100 ; loop transfer_count + /we=1 + /wp=1 : posedge /we
     jmp setup                    side 0b11100 ;                       /we=1 + /wp=1 : finish
 
+    ; =========================================================================
+    ; cmd_id=5: IRQ
+    ; 命令数が収まらなかったのでwait RBBとセットで実行される
+    ;
+    ; cmd_1 = { reserved }
+set_irq_setup:
+set_irq_main:
+    irq set 0                    side 0b11100 ; set irq
 
     ; =========================================================================
-    ; cmd_id=5: wait RBB
-    ; rbb pinがHighになるまで待つ。命令数が収まらなかったのでid6以後もまとめ、IRQもセットする命令に変更
+    ; cmd_id=6: wait RBB
+    ; rbb pinがHighになるまで待つ。命令数が収まらなかったのでid6以後もまとめ
     ;
     ; cmd_1 = { reserved }
 wait_rbb_setup:
 wait_rbb_main:
-    wait 1 gpio 15         side 0b11100 ; wait(RBB=1) + init_pin
-    irq set 0              side 0b11100 ; set irq
-    jmp setup              side 0b11100 ;               init_pin
+    wait 1 gpio 15               side 0b11100 ; wait(RBB=1) + init_pin
 
 .wrap
