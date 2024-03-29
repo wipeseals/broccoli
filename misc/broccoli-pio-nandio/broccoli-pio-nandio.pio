@@ -73,7 +73,7 @@ cmd_latch_setup:
     jmp y--, addr_latch_setup    side 0b11100 ; cmd_id==1
 cmd_latch_main:
     out pins, 8                  side 0b10101 ; osr -> pins,  cle=1, /we=0 : nand_cmd_id
-    nop                          side 0b11101 ;               cle=1, /we=0 : read ready  (t_cls=12ns)
+    nop                          side 0b10101 ;               cle=1, /we=0 : read ready  (t_cls=12ns)
     jmp setup                    side 0b11101 ;               cle=1, /we=1 : posedge /we (t_clh=5ns)
 
     ; =========================================================================
@@ -84,7 +84,7 @@ cmd_latch_main:
     ; cmd_1 = { reserved }
     ; data_0, data_1, data_2, ... : { addr[7:0] }
 addr_latch_setup:
-    jmp y--, dataout_setup       side 0b11100 ; cmd_id==2
+    jmp y--, data_output_setup       side 0b11100 ; cmd_id==2
 addr_latch_main:
     pull block                   side 0b10110 ; txfifo -> osr       + ale=1 + /we=0 : data_0, data_1, data_2..., cmd_1は捨てられる
     out pins, 8                  side 0b10110 ; osr -> pins         + ale=1 + /we=0 : transfer_data0, 1, 2... (t_als=12ns)
@@ -99,14 +99,14 @@ addr_latch_main:
     ; sidesetの使い方は、AC Characteristicsを満たすために調整する
     ;
     ; cmd_1 = { reserved }
-dataout_setup:
-    jmp y--, datain_setup        side 0b11100 ; cmd_id==3
-dataout_main:
+data_output_setup:
+    jmp y--, data_input_setup        side 0b11100 ; cmd_id==3
+data_output_main:
     nop                          side 0b01100 ;                       /re=0 : read ready
     nop                          side 0b01100 ;                       /re=0 : read ready (t_rp=12ns)
     in pins, 8                   side 0b11100 ; pins -> isr           /re=1 : read data (rbbも入力pinのため、io部分だけ取得)
     push block                   side 0b11100 ; isr  -> rxfifo      + /re=1 : push data
-    jmp x-- addr_latch_main      side 0b11100 ; loop transfer_count + /re=1
+    jmp x-- data_output_main     side 0b11100 ; loop transfer_count + /re=1
     jmp setup                    side 0b11100 ;                       /re=1 : finish
 
     ; =========================================================================
@@ -115,12 +115,12 @@ dataout_main:
     ; 転送するデータのTXFIFO->ISRに行うため、TXFIFO Fullになると転送がストールする
     ;
     ; cmd_1 = { reserved }
-datain_setup:
+data_input_setup:
     jmp y--, wait_rbb_setup      side 0b11100 ; cmd_id==4
-datain_main:
+data_input_main:
     pull block                   side 0b10100 ; txfifo -> osr       + /we=0 + /wp=1 : transfer_data0, 1, 2...
     out pins, 8                  side 0b10100 ; osr -> pins         + /we=0 + /wp=1 : transfer_data0, 1, 2... (t_wp=12ns)
-    jmp x-- addr_latch_main      side 0b11100 ; loop transfer_count + /we=1 + /wp=1 : posedge /we
+    jmp x-- data_input_main      side 0b11100 ; loop transfer_count + /we=1 + /wp=1 : posedge /we
     jmp setup                    side 0b11100 ;                       /we=1 + /wp=1 : finish
 
     ; =========================================================================
