@@ -1,0 +1,23 @@
+name: Test Broccoli PIO NandIO
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./misc/broccoli-pio-nandio
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Build & Run
+        run: docker-compose up --build -d
+
+      - name: Archive artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: broccoli-pio-nandio
+          path: .
