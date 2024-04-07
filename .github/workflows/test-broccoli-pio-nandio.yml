@@ -13,8 +13,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Build & Run
-        run: docker-compose up --build -d
+      - name: Build
+        run: docker-compose build test-broccoli-pio-nandio
+
+      - name: Run
+        run: docker-compose run test-broccoli-pio-nandio
 
       - name: Archive artifact
         uses: actions/upload-artifact@v2
