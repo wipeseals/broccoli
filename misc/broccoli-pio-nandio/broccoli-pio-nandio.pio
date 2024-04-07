@@ -36,6 +36,8 @@
 ;   - pioの動作周波数は文集無しで1cycだと125MHz想定で8ns
 ;     - /WPは起動時にHigh固定にして無効化している。/WP=Hに変えたとき、/WE=Lにするまでの時間(t_ww)=100nsかかるため
 ;     - Dryrun用途であればpio/sm起動時にマッピングしないかInput PullDownあたりに固定が良い
+;   - bitorや命令数の都合でceb1,ceb0とioの個別制御ができていない。AddrLatch, CmdLatch, DataInputにおいてはceb1,ceb0を一緒に転送する必要がある
+;     - DataOutputはCSを事前設定するだけで良い。残りの/REはsidesetで制御する
 
 .wrap_target
 .side_set 5
@@ -68,11 +70,11 @@ bitbang_main:
     ; cmd_id=1: nand cmd latch
     ; 指定したCmdIdをCLE=1, /WE=L->H, /WP=L で出力
     ;
-    ; cmd_1 = { nand_cmd_id[7:0] }
+    ; cmd_1 = { ceb[1:0], nand_cmd_id[7:0] }
 cmd_latch_setup:
     jmp y--, addr_latch_setup    side 0b11100 ; cmd_id==1
 cmd_latch_main:
-    out pins, 8                  side 0b10101 ; osr -> pins,  cle=1, /we=0 : nand_cmd_id
+    out pins, 10                 side 0b10101 ; osr -> pins,  cle=1, /we=0 : cs, nand_cmd_id
     nop                          side 0b10101 ;               cle=1, /we=0 : read ready  (t_cls=12ns)
     jmp setup                    side 0b11101 ;               cle=1, /we=1 : posedge /we (t_clh=5ns)
 
@@ -82,13 +84,13 @@ cmd_latch_main:
     ; cmd_1 以後には転送数-1を、指定された分の転送するデータを可変長に受け付ける (min=1byte)
     ;
     ; cmd_1 = { reserved }
-    ; data_0, data_1, data_2, ... : { addr[7:0] }
+    ; data_0, data_1, data_2, ... : { ceb[1:0], addr[7:0] }
 addr_latch_setup:
     jmp y--, data_output_setup       side 0b11100 ; cmd_id==2
 addr_latch_main:
     pull block                   side 0b10110 ; txfifo -> osr       + ale=1 + /we=0 : data_0, data_1, data_2..., cmd_1は捨てられる
-    out pins, 8                  side 0b10110 ; osr -> pins         + ale=1 + /we=0 : transfer_data0, 1, 2... (t_als=12ns)
-    jmp x-- addr_latch_main      side 0b11110 ; loop transfer_count + ale=1 + /we=1 : posedge /we             (t_alh=5ns)
+    out pins, 10                 side 0b10110 ; osr -> pins         + ale=1 + /we=0 : cs | transfer_data0, 1, 2... (t_als=12ns)
+    jmp x-- addr_latch_main      side 0b11110 ; loop transfer_count + ale=1 + /we=1 : posedge /we                  (t_alh=5ns)
     jmp setup                    side 0b11100 ;                               /we=1 : finish
 
     ; =========================================================================
@@ -97,6 +99,7 @@ addr_latch_main:
     ; io pinの内容を読み込むため、pindirsは入力を設定する必要がある
     ; 読み込んだデータの出力はISR->RXFIFOに行うため、RX FIFO Fullになると転送がストールする
     ; sidesetの使い方は、AC Characteristicsを満たすために調整する
+    ; csの設定は、bitbangで事前に設定する必要がある
     ;
     ; cmd_1 = { reserved }
 data_output_setup:
@@ -119,7 +122,7 @@ data_input_setup:
     jmp y--, wait_rbb_setup      side 0b11100 ; cmd_id==4
 data_input_main:
     pull block                   side 0b10100 ; txfifo -> osr       + /we=0 + /wp=1 : transfer_data0, 1, 2...
-    out pins, 8                  side 0b10100 ; osr -> pins         + /we=0 + /wp=1 : transfer_data0, 1, 2... (t_wp=12ns)
+    out pins, 10                 side 0b10100 ; osr -> pins         + /we=0 + /wp=1 : cs | transfer_data0, 1, 2... (t_wp=12ns)
     jmp x-- data_input_main      side 0b11100 ; loop transfer_count + /we=1 + /wp=1 : posedge /we
     jmp setup                    side 0b11100 ;                       /we=1 + /wp=1 : finish
 
