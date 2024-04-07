@@ -128,12 +128,13 @@ data_input_main:
 
     ; =========================================================================
     ; cmd_id=5: IRQ
-    ; 命令数が収まらなかったのでwait RBBとセットで実行される
+    ; IRQを発行する。完了検知用
     ;
     ; cmd_1 = { reserved }
 set_irq_setup:
 set_irq_main:
     irq set 0                    side 0b11100 ; set irq
+    jmp setup                    side 0b11100 ; finish
 
     ; =========================================================================
     ; cmd_id=6: wait RBB
