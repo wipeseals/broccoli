@@ -23,4 +23,4 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: broccoli-pio-nandio
-          path: .
+          path: ./misc/broccoli-pio-nandio
