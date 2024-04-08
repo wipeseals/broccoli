@@ -29,6 +29,7 @@
 ;
 ; - remark
 ;   - autopush/autopull は未使用
+;   - ISRは左シフト、OSRは右シフトで設定 (Data Outputで pins -> isr -> rx fifoへの転送をin+pushで行うため、LSBから1byte分を有効データとして受信)
 ;   - TX/RX FIFOは束ねずDepth=4でも動作するが、可能であれば連結した方が良い
 ;   - TX FIFO/RX FIFOはCPUもしくはDMA経由で、DREQを使って転送する想定
 ;   - sideset と out/set が重複した場合、sidesetが優先される想定
