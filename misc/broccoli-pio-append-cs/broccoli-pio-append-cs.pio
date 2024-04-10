@@ -27,6 +27,6 @@ main_loop:
     in osr, 8             ; osr     -> isr      : isr = { ceb[1:0], io_n[7:0] }
     push block            ; isr     -> rx fifo  : push { ceb[1:0], io_n[7:0] }, isr = 0x00
 
-    jmp main_loop         ;                     : pull next 4byte
+    jmp main_loop         ;                     : pull next byte
 
 .wrap
