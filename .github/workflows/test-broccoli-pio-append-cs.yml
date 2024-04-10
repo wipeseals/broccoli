@@ -1,0 +1,26 @@
+name: Test Broccoli PIO AppendCS
+
+on: [push, pull_request]
+
+jobs:
+  testing:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./misc/broccoli-pio-append-cs
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Build
+        run: docker-compose build test-broccoli-pio-append-cs
+
+      - name: Run
+        run: docker-compose run test-broccoli-pio-append-cs
+
+      - name: Archive artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: broccoli-pio-append-cs
+          path: ./misc/broccoli-pio-append-cs

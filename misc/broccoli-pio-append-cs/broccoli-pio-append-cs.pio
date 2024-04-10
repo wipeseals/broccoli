@@ -1,0 +1,32 @@
+.program broccoli-append-cs
+
+; ceb[1:0] io[7:0] を重担してRX FIFOに転送するPIO Program
+; - remark
+;  - auto pull/pushは使わない
+;  - ISRは左シフト、OSRは右シフトで設定 (broccoli-nandioと同じく、出力時はin命令で必要分しかセットしないため)
+;  - PIO State Machine起動後、最初に取得したデータ下位2bitをceb[1:0]として使用する
+;  - TX FIFO 下位 1byte をデータとして使用する
+;  - cebを切り替える場合、State Machineを再起動する必要がある
+
+.wrap_target
+setup:
+    ; =========================================================================
+    ; ceb取得+scratch xに保存
+    ; tx fifo -> x (ceb[1:0])
+    pull block ; tx fifo -> osr : ceb[1:0]
+    out x, 32  ; osr     -> x   : ceb[1:0]
+
+main_loop:
+    ; =========================================================================
+    ; 流れてきたデータを繰り返し重担して出力
+    ; - 指定した内容にceb[1:0]を付与して出力
+    ; - outだとdst regの中身がクリアされるのでISR内で作る
+    ; - inだとscratch xの中身が破壊されるのでmovで転送してosr->isr転送
+    pull block            ; tx fifo -> osr      : osr = io_n[7:0]
+    mov isr, x            ; x       -> isr      : isr = ceb[1:0]
+    in osr, 8             ; osr     -> isr      : isr = { ceb[1:0], io_n[7:0] }
+    push block            ; isr     -> rx fifo  : push { ceb[1:0], io_n[7:0] }, isr = 0x00
+
+    jmp main_loop         ;                     : pull next 4byte
+
+.wrap
