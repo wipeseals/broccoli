@@ -16,10 +16,10 @@
 		"ghcr.io/devcontainers/features/python:1": {
 			"installTools": true,
 			"installJupyterlab": true,
-			"version": "os-provided"
+			"version": "3.12"
 		},
 		"ghcr.io/devcontainers/features/rust:1": {
-			"version": "latest",
+			"version": "1.76",
 			"profile": "minimal"
 		}
 	},
@@ -32,7 +32,8 @@
 				"ms-python.debugpy"
 			]
 		}
-	}
+	},
+	"postCreateCommand": "./misc/setup_python.sh && ./misc/setup_rust.sh"
 
 	// Use 'mounts' to make the cargo cache persistent in a Docker Volume.
 	// "mounts": [
