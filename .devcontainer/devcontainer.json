@@ -22,6 +22,16 @@
 			"version": "latest",
 			"profile": "minimal"
 		}
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-toolsai.jupyter",
+				"rust-lang.rust-analyzer",
+				"ms-python.python",
+				"ms-python.debugpy"
+			]
+		}
 	}
 
 	// Use 'mounts' to make the cargo cache persistent in a Docker Volume.
