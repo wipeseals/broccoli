@@ -4,7 +4,7 @@
 
 extern crate nandio;
 use nandio::init_nandio_pins;
-use nandio::NandIoPins;
+use nandio::pins::NandIoPins;
 
 use bsp::entry;
 
