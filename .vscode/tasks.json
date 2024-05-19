@@ -23,5 +23,10 @@
             "type": "shell",
             "command": "cargo clippy --all-features -- --deny=warnings"
         },
+        {
+            "label": "clippy fix",
+            "type": "shell",
+            "command": "cargo clippy --fix --allow-dirty --allow-staged --all-features -- --deny=warnings"
+        },
     ]
 }
