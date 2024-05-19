@@ -4,6 +4,7 @@ set -o pipefail
 pip install numpy 
 pip install pandas 
 pip install altair 
+pip install bitarray 
 pip install jupyter 
 pip install wavedrom 
 pip install svgwrite 

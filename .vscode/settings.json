@@ -3,4 +3,5 @@
     "rust-analyzer.checkOnSave.allTargets": false,
     "editor.formatOnSave": true,
     "rust-analyzer.check.allTargets": false,
+    "cmake.configureOnOpen": false,
 }
