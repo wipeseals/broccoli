@@ -1,5 +1,5 @@
+#![allow(unused, dead_code)]
 #![no_std]
-#![no_main]
 
 use defmt::*;
 use defmt_rtt as _;
@@ -117,7 +117,6 @@ macro_rules! init_nandio_pins {
     };
 }
 
-#[allow(dead_code)]
 impl NandIoPins<'_> {
     /// Init NAND I/O Pins
     pub fn init_all_pin(&mut self) {

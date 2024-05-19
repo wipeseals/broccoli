@@ -1,3 +1,4 @@
+#![allow(unused, dead_code)]
 #![no_std]
 #![no_main]
 
