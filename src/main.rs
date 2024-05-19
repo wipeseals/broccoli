@@ -185,6 +185,8 @@ fn main() -> ! {
 
     //////////////////////////////////////
     // data read
+    let mut read_id_results = [0x00, 0x00, 0x00, 0x00, 0x00];
+
     for read_index in 0..5 {
         let read_data: u8 = {
             (if io0_pin.is_high().unwrap() {
@@ -221,6 +223,7 @@ fn main() -> ! {
                 0x00
             })
         };
+        read_id_results[read_index] = read_data;
         info!("data[{}] = {:#02x}", read_index, read_data);
 
         // next cyc
@@ -228,6 +231,18 @@ fn main() -> ! {
         delay.delay_ms(1);
         reb_pin.set_state(bsp::hal::gpio::PinState::Low).unwrap();
         delay.delay_ms(1); // TODO: wait t_REA
+    }
+
+    // check ID
+    if read_id_results[0] == 0x98
+        && read_id_results[1] == 0xF1
+        && read_id_results[2] == 0x80
+        && read_id_results[3] == 0x15
+        && read_id_results[4] == 0x72
+    {
+        info!("ID Read Success");
+    } else {
+        info!("ID Read Fail");
     }
 
     loop {

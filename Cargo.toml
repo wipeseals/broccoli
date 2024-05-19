@@ -4,6 +4,9 @@ name = "broccoli"
 version = "0.2.0"
 license = "MIT OR Apache-2.0"
 
+[workspace]
+members = ["./core/codec", "./core/datamap", "./core/nandio"]
+
 [dependencies]
 cortex-m = "0.7"
 cortex-m-rt = "0.7"
