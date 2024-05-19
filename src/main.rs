@@ -2,7 +2,7 @@
 #![no_main]
 
 use bsp::entry;
-use cortex_m::delay;
+
 use defmt::*;
 use defmt_rtt as _;
 use embedded_hal::digital::v2::{InputPin, OutputPin};
@@ -100,6 +100,8 @@ struct NandIoPins<'a> {
         bsp::hal::gpio::PullUp,
     >,
 }
+
+#[allow(dead_code)]
 impl NandIoPins<'_> {
     /// Init NAND I/O Pins
     pub fn init_all_pin(&mut self) {
@@ -129,6 +131,8 @@ impl NandIoPins<'_> {
         // input
         self.rbb.set_input_enable(true);
         self.rbb.set_output_disable(true);
+
+        trace!("Init All pins");
     }
 
     /// Set PinDir
@@ -152,6 +156,8 @@ impl NandIoPins<'_> {
         self.io5.set_input_enable((data & 0x20) == 0);
         self.io6.set_input_enable((data & 0x40) == 0);
         self.io7.set_input_enable((data & 0x80) == 0);
+
+        trace!("Set IO Pin Dir: 0x{:02X}", data);
     }
 
     /// Set data
@@ -246,12 +252,15 @@ impl NandIoPins<'_> {
                 crate::panic!("Invalid CS index")
             }
         }
+        trace!("Assert CS: 0x{:02X}", cs_index);
     }
 
     /// deassert CS
     pub fn deassert_cs(&mut self) {
         self.ceb0.set_state(bsp::hal::gpio::PinState::High).unwrap();
         self.ceb1.set_state(bsp::hal::gpio::PinState::High).unwrap();
+
+        trace!("Deassert CS");
     }
 
     /// Wait for busy
@@ -265,12 +274,14 @@ impl NandIoPins<'_> {
             count += 1;
             // timeout
             if count >= retry_count {
+                warn!("Wait for Busy: Timeout: {}", count);
                 return false;
             }
             delay_f();
             busy = self.rbb.is_high().unwrap();
         }
-        return true;
+        trace!("Wait for Busy: count: {}", count);
+        true
     }
 
     /// Set Function Pins
@@ -300,6 +311,14 @@ impl NandIoPins<'_> {
         self.reb
             .set_state(bsp::hal::gpio::PinState::from(!read_enable))
             .unwrap();
+
+        trace!(
+            "Set Func Pins: CLE={}, ALE={}, /WE={}, /RE={}",
+            command_latch,
+            address_latch,
+            write_enable,
+            read_enable
+        )
     }
 
     /// Clear Function Pins
@@ -323,13 +342,15 @@ impl NandIoPins<'_> {
         // latch
         self.set_func_pins(true, false, true, false);
         delay_f();
+
+        trace!("Command Input[{}]: 0x{:02X}", 0, command);
     }
 
     /// Address Input
     /// address_inputs: address inputs
     /// delay_f: delay function
     pub fn input_address<F: FnMut()>(&mut self, address_inputs: &[u8], mut delay_f: F) {
-        for (_, address) in address_inputs.iter().enumerate() {
+        for (index, address) in address_inputs.iter().enumerate() {
             // latch data
             // CLE=L, ALE=H, /WE=L->H, /RE=H
 
@@ -342,6 +363,8 @@ impl NandIoPins<'_> {
             // latch
             self.set_func_pins(false, true, true, false);
             delay_f();
+
+            trace!("Address Input[{}]: 0x{:02X}", index, *address);
         }
     }
 
