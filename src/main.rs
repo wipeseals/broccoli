@@ -311,23 +311,17 @@ impl NandIoPins<'_> {
     /// command: command data
     /// delay_f: delay function
     pub fn input_command<F: FnMut()>(&mut self, command: u8, mut delay_f: F) {
-        // set data
-        self.set_io_pin_dir(0xff);
-        self.set_io_pin_data(command);
-
         // latch data
         // CLE=H, ALE=L, /WE=L->H, /RE=H
 
         // set
+        self.set_io_pin_dir(0xff);
+        self.set_io_pin_data(command);
         self.set_func_pins(true, false, false, false);
         delay_f();
 
         // latch
         self.set_func_pins(true, false, true, false);
-        delay_f();
-
-        // clear
-        self.clear_func_pins();
         delay_f();
     }
 
@@ -335,46 +329,34 @@ impl NandIoPins<'_> {
     /// address_inputs: address inputs
     /// delay_f: delay function
     pub fn input_address<F: FnMut()>(&mut self, address_inputs: &[u8], mut delay_f: F) {
-        // set data
         for (_, address) in address_inputs.iter().enumerate() {
-            // set address[index]
-            self.set_io_pin_data(*address);
-
             // latch data
             // CLE=L, ALE=H, /WE=L->H, /RE=H
 
             // set
+            self.set_io_pin_dir(0xff);
+            self.set_io_pin_data(*address);
             self.set_func_pins(false, true, false, false);
             delay_f();
 
             // latch
             self.set_func_pins(false, true, true, false);
             delay_f();
-
-            // /WE=H->Lは次cycのData set時に行う
         }
-
-        // clear
-        self.clear_func_pins();
-        delay_f();
     }
 
     /// Data Input
     /// data_inputs: data inputs
     /// delay_f: delay function
     fn input_data<F: FnMut()>(&mut self, data_inputs: &[u8], mut delay_f: F) {
-        // set data direction to output
-        self.set_io_pin_dir(0xff);
-
         // set datas
-        for (_, data) in data_inputs.iter().enumerate() {
-            // set data[index]
-            self.set_io_pin_data(*data);
-
+        for (index, data) in data_inputs.iter().enumerate() {
             // latch data
             // CLE=L, ALE=L, /WE=L->H, /RE=H
 
             // set
+            self.set_io_pin_dir(0xff);
+            self.set_io_pin_data(*data);
             self.set_func_pins(false, false, false, false);
             delay_f();
 
@@ -382,12 +364,8 @@ impl NandIoPins<'_> {
             self.set_func_pins(false, false, true, false);
             delay_f();
 
-            // /WE=H->Lは次cycのData set時に行う
+            trace!("Data Input[{}]: 0x{:02X}", index, *data);
         }
-
-        // clear
-        self.clear_func_pins();
-        delay_f();
     }
 
     /// Data Output
@@ -399,28 +377,28 @@ impl NandIoPins<'_> {
         read_bytes: usize,
         mut delay_f: F,
     ) -> &'a [u8] {
-        // set data direction to input
-        self.set_io_pin_dir(0x00);
-
         // read datas
         for (index, data) in output_data_buf.iter_mut().enumerate() {
             // slice.len() > read_bytes
             if index >= read_bytes {
                 break;
             }
-            // CLE=L, ALE=L, /WE=L, /RE=H->L
 
             // data output from ic
+            // CLE=L, ALE=L, /WE=L, /RE=H->L
+
+            self.set_io_pin_dir(0x00);
             self.set_func_pins(false, false, false, true);
             delay_f();
 
             // capture & parse data bits
             *data = self.get_io_pin_data();
-            info!("Data[{}]: 0x{:02X}", index, *data);
 
             // RE
             self.set_func_pins(false, false, false, false);
             delay_f();
+
+            trace!("Data Output[{}]: 0x{:02X}", index, *data);
         }
 
         // return read data
@@ -466,7 +444,6 @@ fn id_read(
 
 #[entry]
 fn main() -> ! {
-    info!("Program start");
     let mut pac = pac::Peripherals::take().unwrap();
     let core = pac::CorePeripherals::take().unwrap();
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
@@ -528,7 +505,7 @@ fn main() -> ! {
             && read_id_results[4] == 0x72
         {
             info!(
-                "ID Read Success CS={} [{}, {}, {}, {}, {}]",
+                "ID Read Success CS={} [{:02x}, {:02x}, {:02x}, {:02x}, {:02x}]",
                 cs_index,
                 read_id_results[0],
                 read_id_results[1],
@@ -538,7 +515,7 @@ fn main() -> ! {
             );
         } else {
             warn!(
-                "ID Read Fail CS={} [{}, {}, {}, {}, {}]",
+                "ID Read Fail CS={} [{:02x}, {:02x}, {:02x}, {:02x}, {:02x}]",
                 cs_index,
                 read_id_results[0],
                 read_id_results[1],
