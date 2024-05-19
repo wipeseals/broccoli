@@ -2,6 +2,7 @@
 #![no_main]
 
 use bsp::entry;
+use cortex_m::delay;
 use defmt::*;
 use defmt_rtt as _;
 use embedded_hal::digital::v2::{InputPin, OutputPin};
@@ -100,99 +101,128 @@ struct NandIoPins<'a> {
     >,
 }
 impl NandIoPins<'_> {
+    /// Init NAND I/O Pins
+    pub fn init_all_pin(&mut self) {
+        // bidirectional. default: output, low
+        self.set_io_pin_dir(0xff);
+        self.set_io_pin_data(0x00);
+
+        // output
+        self.ceb0.set_input_enable(false);
+        self.ceb1.set_input_enable(false);
+        self.deassert_cs();
+        self.ceb0.set_output_disable(false);
+        self.ceb1.set_output_disable(false);
+
+        self.cle.set_input_enable(false);
+        self.ale.set_input_enable(false);
+        self.wpb.set_input_enable(false);
+        self.web.set_input_enable(false);
+        self.reb.set_input_enable(false);
+        self.set_func_pins(false, false, false, false);
+        self.cle.set_output_disable(false);
+        self.ale.set_output_disable(false);
+        self.wpb.set_output_disable(false);
+        self.web.set_output_disable(false);
+        self.reb.set_output_disable(false);
+
+        // input
+        self.rbb.set_input_enable(true);
+        self.rbb.set_output_disable(true);
+    }
+
+    /// Set PinDir
+    /// pin_dir: pin direction. 00: input, 01: output
+    pub fn set_io_pin_dir(&mut self, data: u8) {
+        // set output enable
+        self.io0.set_output_disable((data & 0x01) == 0);
+        self.io1.set_output_disable((data & 0x02) == 0);
+        self.io2.set_output_disable((data & 0x04) == 0);
+        self.io3.set_output_disable((data & 0x08) == 0);
+        self.io4.set_output_disable((data & 0x10) == 0);
+        self.io5.set_output_disable((data & 0x20) == 0);
+        self.io6.set_output_disable((data & 0x40) == 0);
+        self.io7.set_output_disable((data & 0x80) == 0);
+        // set input enable
+        self.io0.set_input_enable((data & 0x01) == 0);
+        self.io1.set_input_enable((data & 0x02) == 0);
+        self.io2.set_input_enable((data & 0x04) == 0);
+        self.io3.set_input_enable((data & 0x08) == 0);
+        self.io4.set_input_enable((data & 0x10) == 0);
+        self.io5.set_input_enable((data & 0x20) == 0);
+        self.io6.set_input_enable((data & 0x40) == 0);
+        self.io7.set_input_enable((data & 0x80) == 0);
+    }
+
     /// Set data
     /// data: write data to IO pins
     pub fn set_io_pin_data(&mut self, data: u8) {
         self.io0
-            .into_push_pull_output_in_state(if data & 0x01 != 0 {
-                bsp::hal::gpio::PinState::High
-            } else {
-                bsp::hal::gpio::PinState::Low
-            });
+            .set_state(bsp::hal::gpio::PinState::from(data & 0x01 != 0))
+            .unwrap();
         self.io1
-            .into_push_pull_output_in_state(if data & 0x02 != 0 {
-                bsp::hal::gpio::PinState::High
-            } else {
-                bsp::hal::gpio::PinState::Low
-            });
+            .set_state(bsp::hal::gpio::PinState::from(data & 0x02 != 0))
+            .unwrap();
         self.io2
-            .into_push_pull_output_in_state(if data & 0x04 != 0 {
-                bsp::hal::gpio::PinState::High
-            } else {
-                bsp::hal::gpio::PinState::Low
-            });
+            .set_state(bsp::hal::gpio::PinState::from(data & 0x04 != 0))
+            .unwrap();
         self.io3
-            .into_push_pull_output_in_state(if data & 0x08 != 0 {
-                bsp::hal::gpio::PinState::High
-            } else {
-                bsp::hal::gpio::PinState::Low
-            });
+            .set_state(bsp::hal::gpio::PinState::from(data & 0x08 != 0))
+            .unwrap();
         self.io4
-            .into_push_pull_output_in_state(if data & 0x10 != 0 {
-                bsp::hal::gpio::PinState::High
-            } else {
-                bsp::hal::gpio::PinState::Low
-            });
+            .set_state(bsp::hal::gpio::PinState::from(data & 0x10 != 0))
+            .unwrap();
         self.io5
-            .into_push_pull_output_in_state(if data & 0x20 != 0 {
-                bsp::hal::gpio::PinState::High
-            } else {
-                bsp::hal::gpio::PinState::Low
-            });
+            .set_state(bsp::hal::gpio::PinState::from(data & 0x20 != 0))
+            .unwrap();
         self.io6
-            .into_push_pull_output_in_state(if data & 0x40 != 0 {
-                bsp::hal::gpio::PinState::High
-            } else {
-                bsp::hal::gpio::PinState::Low
-            });
+            .set_state(bsp::hal::gpio::PinState::from(data & 0x40 != 0))
+            .unwrap();
         self.io7
-            .into_push_pull_output_in_state(if data & 0x80 != 0 {
-                bsp::hal::gpio::PinState::High
-            } else {
-                bsp::hal::gpio::PinState::Low
-            });
+            .set_state(bsp::hal::gpio::PinState::from(data & 0x80 != 0))
+            .unwrap();
     }
 
     /// Get data
     /// return: read data from IO pins
     pub fn get_io_pin_data(&mut self) -> u8 {
         let mut data: u8 = 0;
-        data |= if self.io0.into_pull_down_input().is_high().unwrap() {
+        data |= if self.io0.is_high().unwrap() {
             0x01
         } else {
             0x00
         };
-        data |= if self.io1.into_pull_down_input().is_high().unwrap() {
+        data |= if self.io1.is_high().unwrap() {
             0x02
         } else {
             0x00
         };
-        data |= if self.io2.into_pull_down_input().is_high().unwrap() {
+        data |= if self.io2.is_high().unwrap() {
             0x04
         } else {
             0x00
         };
-        data |= if self.io3.into_pull_down_input().is_high().unwrap() {
+        data |= if self.io3.is_high().unwrap() {
             0x08
         } else {
             0x00
         };
-        data |= if self.io4.into_pull_down_input().is_high().unwrap() {
+        data |= if self.io4.is_high().unwrap() {
             0x10
         } else {
             0x00
         };
-        data |= if self.io5.into_pull_down_input().is_high().unwrap() {
+        data |= if self.io5.is_high().unwrap() {
             0x20
         } else {
             0x00
         };
-        data |= if self.io6.into_pull_down_input().is_high().unwrap() {
+        data |= if self.io6.is_high().unwrap() {
             0x40
         } else {
             0x00
         };
-        data |= if self.io7.into_pull_down_input().is_high().unwrap() {
+        data |= if self.io7.is_high().unwrap() {
             0x80
         } else {
             0x00
@@ -205,16 +235,12 @@ impl NandIoPins<'_> {
     pub fn assert_cs(&mut self, cs_index: u32) {
         match cs_index {
             0 => {
-                self.ceb0
-                    .into_push_pull_output_in_state(bsp::hal::gpio::PinState::Low);
-                self.ceb1
-                    .into_push_pull_output_in_state(bsp::hal::gpio::PinState::High);
+                self.ceb0.set_state(bsp::hal::gpio::PinState::Low).unwrap();
+                self.ceb1.set_state(bsp::hal::gpio::PinState::High).unwrap();
             }
             1 => {
-                self.ceb0
-                    .into_push_pull_output_in_state(bsp::hal::gpio::PinState::High);
-                self.ceb1
-                    .into_push_pull_output_in_state(bsp::hal::gpio::PinState::Low);
+                self.ceb0.set_state(bsp::hal::gpio::PinState::High).unwrap();
+                self.ceb1.set_state(bsp::hal::gpio::PinState::Low).unwrap();
             }
             _ => {
                 crate::panic!("Invalid CS index")
@@ -224,10 +250,27 @@ impl NandIoPins<'_> {
 
     /// deassert CS
     pub fn deassert_cs(&mut self) {
-        self.ceb0
-            .into_push_pull_output_in_state(bsp::hal::gpio::PinState::High);
-        self.ceb1
-            .into_push_pull_output_in_state(bsp::hal::gpio::PinState::High);
+        self.ceb0.set_state(bsp::hal::gpio::PinState::High).unwrap();
+        self.ceb1.set_state(bsp::hal::gpio::PinState::High).unwrap();
+    }
+
+    /// Wait for busy
+    /// delay_f: delay function
+    /// timeout: timeout value
+    /// return: true if busy is low, false if timeout
+    pub fn wait_for_busy<F: FnMut()>(&mut self, mut delay_f: F, retry_count: u32) -> bool {
+        let mut busy: bool = self.rbb.is_high().unwrap();
+        let mut count: u32 = 0;
+        while busy {
+            count += 1;
+            // timeout
+            if count >= retry_count {
+                return false;
+            }
+            delay_f();
+            busy = self.rbb.is_high().unwrap();
+        }
+        return true;
     }
 
     /// Set Function Pins
@@ -243,28 +286,20 @@ impl NandIoPins<'_> {
         read_enable: bool,
     ) {
         // positive logic
-        self.cle.into_push_pull_output_in_state(if command_latch {
-            bsp::hal::gpio::PinState::High
-        } else {
-            bsp::hal::gpio::PinState::Low
-        });
-        self.ale.into_push_pull_output_in_state(if address_latch {
-            bsp::hal::gpio::PinState::High
-        } else {
-            bsp::hal::gpio::PinState::Low
-        });
+        self.cle
+            .set_state(bsp::hal::gpio::PinState::from(command_latch))
+            .unwrap();
+        self.ale
+            .set_state(bsp::hal::gpio::PinState::from(address_latch))
+            .unwrap();
 
         // negative logic
-        self.web.into_push_pull_output_in_state(if write_enable {
-            bsp::hal::gpio::PinState::Low
-        } else {
-            bsp::hal::gpio::PinState::High
-        });
-        self.reb.into_push_pull_output_in_state(if read_enable {
-            bsp::hal::gpio::PinState::Low
-        } else {
-            bsp::hal::gpio::PinState::High
-        });
+        self.web
+            .set_state(bsp::hal::gpio::PinState::from(!write_enable))
+            .unwrap();
+        self.reb
+            .set_state(bsp::hal::gpio::PinState::from(!read_enable))
+            .unwrap();
     }
 
     /// Clear Function Pins
@@ -275,8 +310,9 @@ impl NandIoPins<'_> {
     /// Command Input
     /// command: command data
     /// delay_f: delay function
-    pub fn input_command<F: FnMut()>(&mut self, command: u8, delay_f: Option<F>) {
+    pub fn input_command<F: FnMut()>(&mut self, command: u8, mut delay_f: F) {
         // set data
+        self.set_io_pin_dir(0xff);
         self.set_io_pin_data(command);
 
         // latch data
@@ -284,26 +320,23 @@ impl NandIoPins<'_> {
 
         // set
         self.set_func_pins(true, false, false, false);
-        if let Some(mut f) = delay_f {
-            f();
-        }
+        delay_f();
 
         // latch
         self.set_func_pins(true, false, true, false);
-        if let Some(mut f) = delay_f {
-            f();
-        }
+        delay_f();
 
         // clear
         self.clear_func_pins();
-        if let Some(mut f) = delay_f {
-            f();
-        }
+        delay_f();
     }
 
-    pub fn input_address<F: FnMut()>(&mut self, address_inputs: &[u8], delay_f: Option<F>) {
+    /// Address Input
+    /// address_inputs: address inputs
+    /// delay_f: delay function
+    pub fn input_address<F: FnMut()>(&mut self, address_inputs: &[u8], mut delay_f: F) {
         // set data
-        for (index, address) in address_inputs.iter().enumerate() {
+        for (_, address) in address_inputs.iter().enumerate() {
             // set address[index]
             self.set_io_pin_data(*address);
 
@@ -312,32 +345,29 @@ impl NandIoPins<'_> {
 
             // set
             self.set_func_pins(false, true, false, false);
-            if let Some(mut f) = delay_f {
-                f();
-            }
+            delay_f();
 
             // latch
             self.set_func_pins(false, true, true, false);
-            if let Some(mut f) = delay_f {
-                f();
-            }
+            delay_f();
 
             // /WE=H->Lは次cycのData set時に行う
         }
 
         // clear
         self.clear_func_pins();
-        if let Some(mut f) = delay_f {
-            f();
-        }
+        delay_f();
     }
 
     /// Data Input
     /// data_inputs: data inputs
     /// delay_f: delay function
-    fn input_data<F: FnMut()>(&mut self, data_inputs: &[u8], delay_f: Option<F>) {
+    fn input_data<F: FnMut()>(&mut self, data_inputs: &[u8], mut delay_f: F) {
+        // set data direction to output
+        self.set_io_pin_dir(0xff);
+
         // set datas
-        for (index, data) in data_inputs.iter().enumerate() {
+        for (_, data) in data_inputs.iter().enumerate() {
             // set data[index]
             self.set_io_pin_data(*data);
 
@@ -346,24 +376,18 @@ impl NandIoPins<'_> {
 
             // set
             self.set_func_pins(false, false, false, false);
-            if let Some(mut f) = delay_f {
-                f();
-            }
+            delay_f();
 
             // latch
             self.set_func_pins(false, false, true, false);
-            if let Some(mut f) = delay_f {
-                f();
-            }
+            delay_f();
 
             // /WE=H->Lは次cycのData set時に行う
         }
 
         // clear
         self.clear_func_pins();
-        if let Some(mut f) = delay_f {
-            f();
-        }
+        delay_f();
     }
 
     /// Data Output
@@ -373,8 +397,12 @@ impl NandIoPins<'_> {
         &mut self,
         output_data_buf: &'a mut [u8],
         read_bytes: usize,
-        delay_f: Option<F>,
+        mut delay_f: F,
     ) -> &'a [u8] {
+        // set data direction to input
+        self.set_io_pin_dir(0x00);
+
+        // read datas
         for (index, data) in output_data_buf.iter_mut().enumerate() {
             // slice.len() > read_bytes
             if index >= read_bytes {
@@ -384,18 +412,15 @@ impl NandIoPins<'_> {
 
             // data output from ic
             self.set_func_pins(false, false, false, true);
-            if let Some(mut f) = delay_f {
-                f();
-            }
+            delay_f();
 
             // capture & parse data bits
             *data = self.get_io_pin_data();
+            info!("Data[{}]: 0x{:02X}", index, *data);
 
             // RE
             self.set_func_pins(false, false, false, false);
-            if let Some(mut f) = delay_f {
-                f();
-            }
+            delay_f();
         }
 
         // return read data
@@ -415,22 +440,26 @@ fn id_read(
     let id_read_size: usize = 5;
     let mut id_read_results = [0x00, 0x00, 0x00, 0x00, 0x00];
 
-    // assert CS
+    // initialize
+    nandio_pins.init_all_pin();
+
+    // command latch 0xff (Reset)
     nandio_pins.assert_cs(cs_index);
+    nandio_pins.input_command(0xff, || delay.delay_ms(1));
+    nandio_pins.deassert_cs();
+    delay.delay_ms(10);
 
     // command latch 0x90 (ID Read)
-    nandio_pins.input_command(0x90, Some(|| delay.delay_ms(1)));
     // Address latch 0x00
-    nandio_pins.input_address(&[0x00], Some(|| delay.delay_ms(1)));
     // Exec ID Read (read 5 bytes)
-    nandio_pins.output_data(
-        &mut id_read_results,
-        id_read_size,
-        Some(|| delay.delay_ms(1)),
-    );
-
-    // deassert CS
+    nandio_pins.assert_cs(cs_index);
+    nandio_pins.input_command(0x90, || delay.delay_ms(1));
+    nandio_pins.input_address(&[0x00], || delay.delay_ms(1));
+    nandio_pins.output_data(&mut id_read_results, id_read_size, || delay.delay_ms(1));
     nandio_pins.deassert_cs();
+
+    // finalize
+    nandio_pins.init_all_pin();
 
     id_read_results
 }
@@ -470,56 +499,25 @@ fn main() -> ! {
     let mut led_pin = pins.led.into_push_pull_output();
     // assign nandio pins (gpio0~gpio15)
     let mut nandio_pins = NandIoPins {
-        io0: &mut pins
-            .gpio0
-            .into_push_pull_output_in_state(bsp::hal::gpio::PinState::Low),
-        io1: &mut pins
-            .gpio1
-            .into_push_pull_output_in_state(bsp::hal::gpio::PinState::Low),
-        io2: &mut pins
-            .gpio2
-            .into_push_pull_output_in_state(bsp::hal::gpio::PinState::Low),
-        io3: &mut pins
-            .gpio3
-            .into_push_pull_output_in_state(bsp::hal::gpio::PinState::Low),
-        io4: &mut pins
-            .gpio4
-            .into_push_pull_output_in_state(bsp::hal::gpio::PinState::Low),
-        io5: &mut pins
-            .gpio5
-            .into_push_pull_output_in_state(bsp::hal::gpio::PinState::Low),
-        io6: &mut pins
-            .gpio6
-            .into_push_pull_output_in_state(bsp::hal::gpio::PinState::Low),
-        io7: &mut pins
-            .gpio7
-            .into_push_pull_output_in_state(bsp::hal::gpio::PinState::Low),
-        ceb0: &mut pins
-            .gpio8
-            .into_push_pull_output_in_state(bsp::hal::gpio::PinState::High),
-        ceb1: &mut pins
-            .gpio9
-            .into_push_pull_output_in_state(bsp::hal::gpio::PinState::High),
-        cle: &mut pins
-            .gpio10
-            .into_push_pull_output_in_state(bsp::hal::gpio::PinState::Low),
-        ale: &mut pins
-            .gpio11
-            .into_push_pull_output_in_state(bsp::hal::gpio::PinState::Low),
-        wpb: &mut pins
-            .gpio12
-            .into_push_pull_output_in_state(bsp::hal::gpio::PinState::Low),
-        web: &mut pins
-            .gpio13
-            .into_push_pull_output_in_state(bsp::hal::gpio::PinState::High),
-        reb: &mut pins
-            .gpio14
-            .into_push_pull_output_in_state(bsp::hal::gpio::PinState::High),
+        io0: &mut pins.gpio0.into_push_pull_output(),
+        io1: &mut pins.gpio1.into_push_pull_output(),
+        io2: &mut pins.gpio2.into_push_pull_output(),
+        io3: &mut pins.gpio3.into_push_pull_output(),
+        io4: &mut pins.gpio4.into_push_pull_output(),
+        io5: &mut pins.gpio5.into_push_pull_output(),
+        io6: &mut pins.gpio6.into_push_pull_output(),
+        io7: &mut pins.gpio7.into_push_pull_output(),
+        ceb0: &mut pins.gpio8.into_push_pull_output(),
+        ceb1: &mut pins.gpio9.into_push_pull_output(),
+        cle: &mut pins.gpio10.into_push_pull_output(),
+        ale: &mut pins.gpio11.into_push_pull_output(),
+        wpb: &mut pins.gpio12.into_push_pull_output(),
+        web: &mut pins.gpio13.into_push_pull_output(),
+        reb: &mut pins.gpio14.into_push_pull_output(),
         rbb: &mut pins.gpio15.into_pull_up_input(),
     };
 
     for cs_index in 0..2 {
-        info!("ID Read Test: CS={}", cs_index);
         let read_id_results = id_read(&mut nandio_pins, &mut delay, cs_index);
 
         // check ID
@@ -529,9 +527,25 @@ fn main() -> ! {
             && read_id_results[3] == 0x15
             && read_id_results[4] == 0x72
         {
-            info!("ID Read Success CS={}", cs_index);
+            info!(
+                "ID Read Success CS={} [{}, {}, {}, {}, {}]",
+                cs_index,
+                read_id_results[0],
+                read_id_results[1],
+                read_id_results[2],
+                read_id_results[3],
+                read_id_results[4]
+            );
         } else {
-            info!("ID Read Fail CS={}", cs_index);
+            warn!(
+                "ID Read Fail CS={} [{}, {}, {}, {}, {}]",
+                cs_index,
+                read_id_results[0],
+                read_id_results[1],
+                read_id_results[2],
+                read_id_results[3],
+                read_id_results[4]
+            );
         }
     }
 
