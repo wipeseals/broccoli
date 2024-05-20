@@ -1,6 +1,16 @@
+#![feature(custom_test_frameworks)]
 #![allow(unused, dead_code)]
 #![no_std]
 #![no_main]
+#![test_runner(crate::test_runner)]
+
+#[cfg(test)]
+fn test_runner(tests: &[&dyn Fn()]) {
+    info!("Running {} tests", tests.len());
+    for test in tests {
+        test();
+    }
+}
 
 extern crate nandio;
 use nandio::init_nandio_pins;
@@ -130,5 +140,3 @@ fn main() -> ! {
         delay.delay_ms(1000);
     }
 }
-
-// End of file
