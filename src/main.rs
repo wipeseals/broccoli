@@ -32,9 +32,10 @@ fn init_pins(nandio_pins: &mut NandIoPins) {
 fn reset(nandio_pins: &mut NandIoPins, delay: &mut cortex_m::delay::Delay, cs_index: u32) -> bool {
     // command latch 0xff (Reset)
     nandio_pins.assert_cs(cs_index);
-    nandio_pins.input_command(0xff, || delay.delay_ms(1));
+    nandio_pins.input_command(0xff, || delay.delay_us(1));
     nandio_pins.deassert_cs();
-    delay.delay_ms(10);
+    // t_RST = ~500us
+    delay.delay_us(500);
 
     true
 }
@@ -51,9 +52,9 @@ fn id_read(
     // Address latch 0x00
     // Read 5 bytes
     nandio_pins.assert_cs(cs_index);
-    nandio_pins.input_command(0x90, || delay.delay_ms(1));
-    nandio_pins.input_address(&[0x00], || delay.delay_ms(1));
-    nandio_pins.output_data(&mut id_read_results, id_read_size, || delay.delay_ms(1));
+    nandio_pins.input_command(0x90, || delay.delay_us(1)); // t_XXX worst (w/o t_RST) = 100ns
+    nandio_pins.input_address(&[0x00], || delay.delay_us(1));
+    nandio_pins.output_data(&mut id_read_results, id_read_size, || delay.delay_us(1));
     nandio_pins.deassert_cs();
 
     id_read_results
