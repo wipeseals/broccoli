@@ -384,7 +384,7 @@ impl NandIoPins<'_> {
     /// Data Input
     /// data_inputs: data inputs
     /// delay_f: delay function
-    fn input_data<F: FnMut()>(&mut self, data_inputs: &[u8], mut delay_f: F) {
+    pub fn input_data<F: FnMut()>(&mut self, data_inputs: &[u8], mut delay_f: F) {
         // set datas
         for (index, data) in data_inputs.iter().enumerate() {
             // latch data
