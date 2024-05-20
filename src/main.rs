@@ -23,6 +23,21 @@ use bsp::hal::{
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////
+/// Initialize pins
+fn init_pins(nandio_pins: &mut NandIoPins) {
+    nandio_pins.init_all_pin();
+}
+
+/// Exec Reset Operation
+fn reset(nandio_pins: &mut NandIoPins, delay: &mut cortex_m::delay::Delay, cs_index: u32) -> bool {
+    // command latch 0xff (Reset)
+    nandio_pins.assert_cs(cs_index);
+    nandio_pins.input_command(0xff, || delay.delay_ms(1));
+    nandio_pins.deassert_cs();
+    delay.delay_ms(10);
+
+    true
+}
 /// Exec ID Read Operation
 fn id_read(
     nandio_pins: &mut NandIoPins,
@@ -32,26 +47,14 @@ fn id_read(
     let id_read_size: usize = 5;
     let mut id_read_results = [0x00, 0x00, 0x00, 0x00, 0x00];
 
-    // initialize
-    nandio_pins.init_all_pin();
-
-    // command latch 0xff (Reset)
-    nandio_pins.assert_cs(cs_index);
-    nandio_pins.input_command(0xff, || delay.delay_ms(1));
-    nandio_pins.deassert_cs();
-    delay.delay_ms(10);
-
     // command latch 0x90 (ID Read)
     // Address latch 0x00
-    // Exec ID Read (read 5 bytes)
+    // Read 5 bytes
     nandio_pins.assert_cs(cs_index);
     nandio_pins.input_command(0x90, || delay.delay_ms(1));
     nandio_pins.input_address(&[0x00], || delay.delay_ms(1));
     nandio_pins.output_data(&mut id_read_results, id_read_size, || delay.delay_ms(1));
     nandio_pins.deassert_cs();
-
-    // finalize
-    nandio_pins.init_all_pin();
 
     id_read_results
 }
@@ -90,17 +93,18 @@ fn main() -> ! {
     let mut led_pin = pins.led.into_push_pull_output();
     // assign nandio pins (gpio0~gpio15)
     let mut nandio_pins = init_nandio_pins!(pins);
+    init_pins(&mut nandio_pins);
+
+    let idread_expect_data = [0x98, 0xF1, 0x80, 0x15, 0x72];
 
     for cs_index in 0..2 {
+        // Reset
+        let _ = reset(&mut nandio_pins, &mut delay, cs_index);
+        // ID Read
         let read_id_results = id_read(&mut nandio_pins, &mut delay, cs_index);
 
         // check ID
-        if read_id_results[0] == 0x98
-            && read_id_results[1] == 0xF1
-            && read_id_results[2] == 0x80
-            && read_id_results[3] == 0x15
-            && read_id_results[4] == 0x72
-        {
+        if read_id_results == idread_expect_data {
             info!(
                 "ID Read Success CS={} [{:02x}, {:02x}, {:02x}, {:02x}, {:02x}]",
                 cs_index,
