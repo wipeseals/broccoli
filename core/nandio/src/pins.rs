@@ -1,5 +1,5 @@
 #![allow(unused, dead_code)]
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 
 use defmt::*;
 use defmt_rtt as _;

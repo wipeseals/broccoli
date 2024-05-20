@@ -1,16 +1,6 @@
-#![feature(custom_test_frameworks)]
 #![allow(unused, dead_code)]
-#![no_std]
-#![no_main]
-#![test_runner(crate::test_runner)]
-
-#[cfg(test)]
-fn test_runner(tests: &[&dyn Fn()]) {
-    info!("Running {} tests", tests.len());
-    for test in tests {
-        test();
-    }
-}
+#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_main)]
 
 extern crate nandio;
 use nandio::init_nandio_pins;
