@@ -281,7 +281,7 @@ impl NandIoPins<'_> {
     /// timeout: timeout value
     /// return: true if busy is low, false if timeout
     pub fn wait_for_busy<F: FnMut()>(&mut self, mut delay_f: F, retry_count: u32) -> bool {
-        let mut busy: bool = self.rbb.is_high().unwrap();
+        let mut busy: bool = !self.rbb.is_low().unwrap();
         let mut count: u32 = 0;
         while busy {
             count += 1;
@@ -291,7 +291,7 @@ impl NandIoPins<'_> {
                 return false;
             }
             delay_f();
-            busy = self.rbb.is_high().unwrap();
+            busy = self.rbb.is_low().unwrap();
         }
         trace!("Wait for Busy: count: {}", count);
         true
@@ -439,7 +439,5 @@ impl NandIoPins<'_> {
 
         // return read data
         output_data_buf[0..read_bytes].as_ref()
-
-        // 最終ループで/RE=Hになっている
     }
 }
