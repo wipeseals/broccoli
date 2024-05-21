@@ -56,17 +56,17 @@ fn main() -> ! {
     let mut led_pin = pins.led.into_push_pull_output();
     // assign nandio pins (gpio0~gpio15)
     let mut nandio_pins = init_nandio_pins!(pins);
-    let mut command = broccoli_nandio::cmd::Command {
+    let mut nandio_driver = broccoli_nandio::driver::Driver {
         nandio_pins: &mut nandio_pins,
         delay: &mut delay,
     };
-    command.init_pins();
+    nandio_driver.init_pins();
 
     for cs_index in 0..2 {
         // Reset
-        command.reset(cs_index);
+        nandio_driver.reset(cs_index);
         // ID Read
-        let (read_ok, id_read_data) = command.id_read(cs_index);
+        let (read_ok, id_read_data) = nandio_driver.id_read(cs_index);
 
         // check ID
         info!(
