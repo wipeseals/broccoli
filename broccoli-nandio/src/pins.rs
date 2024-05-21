@@ -8,6 +8,11 @@ use panic_probe as _;
 
 use rp_pico as bsp;
 
+/// Error Type
+pub enum Error {
+    Common,
+    Timeout,
+}
 /// NAND I/O Pins
 pub struct NandIoPins<'a> {
     pub io0: &'a mut bsp::hal::gpio::Pin<
@@ -263,7 +268,7 @@ impl NandIoPins<'_> {
                 self.ceb0.set_state(bsp::hal::gpio::PinState::High).unwrap();
                 self.ceb1.set_state(bsp::hal::gpio::PinState::Low).unwrap();
             }
-            _ => core::panic!("Invalid CS index"),
+            _ => core::unreachable!("Invalid CS index"),
         }
         trace!("Assert CS: 0x{:02X}", cs_index);
     }
@@ -280,7 +285,11 @@ impl NandIoPins<'_> {
     /// delay_f: delay function
     /// timeout: timeout value
     /// return: true if busy is low, false if timeout
-    pub fn wait_for_busy<F: FnMut()>(&mut self, mut delay_f: F, retry_count: u32) -> bool {
+    pub fn wait_for_busy<F: FnMut()>(
+        &mut self,
+        mut delay_f: F,
+        retry_count: u32,
+    ) -> Result<(), Error> {
         let mut busy: bool = !self.rbb.is_low().unwrap();
         let mut count: u32 = 0;
         while busy {
@@ -288,13 +297,13 @@ impl NandIoPins<'_> {
             // timeout
             if count >= retry_count {
                 warn!("Wait for Busy: Timeout: {}", count);
-                return false;
+                return Err(Error::Timeout);
             }
             delay_f();
             busy = self.rbb.is_low().unwrap();
         }
         trace!("Wait for Busy: count: {}", count);
-        true
+        Ok(())
     }
 
     /// Set Function Pins
@@ -409,12 +418,12 @@ impl NandIoPins<'_> {
     /// delay_f: delay function
     pub fn output_data<'a, F: FnMut()>(
         &mut self,
-        output_data_buf: &'a mut [u8],
+        output_data_ref: &'a mut [u8],
         read_bytes: usize,
         mut delay_f: F,
     ) -> &'a [u8] {
         // read datas
-        for (index, data) in output_data_buf.iter_mut().enumerate() {
+        for (index, data) in output_data_ref.iter_mut().enumerate() {
             // slice.len() > read_bytes
             if index >= read_bytes {
                 break;
@@ -438,6 +447,6 @@ impl NandIoPins<'_> {
         }
 
         // return read data
-        output_data_buf[0..read_bytes].as_ref()
+        output_data_ref[0..read_bytes].as_ref()
     }
 }
