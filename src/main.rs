@@ -2,9 +2,9 @@
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
 
-extern crate nandio;
-use nandio::init_nandio_pins;
-use nandio::pins::NandIoPins;
+extern crate broccoli_nandio;
+use broccoli_nandio::init_nandio_pins;
+use broccoli_nandio::pins::NandIoPins;
 
 use bsp::entry;
 
@@ -56,7 +56,7 @@ fn main() -> ! {
     let mut led_pin = pins.led.into_push_pull_output();
     // assign nandio pins (gpio0~gpio15)
     let mut nandio_pins = init_nandio_pins!(pins);
-    let mut command = nandio::cmd::Command {
+    let mut command = broccoli_nandio::cmd::Command {
         nandio_pins: &mut nandio_pins,
         delay: &mut delay,
     };

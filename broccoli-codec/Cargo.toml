@@ -1,5 +1,5 @@
 [package]
-name = "codec"
+name = "broccoli-codec"
 version = "0.1.0"
 edition = "2021"
 
