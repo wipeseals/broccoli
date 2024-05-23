@@ -306,6 +306,16 @@ impl NandIoPins<'_> {
         Ok(())
     }
 
+    /// Set Write Protect Enable
+    /// enable: write protect enable
+    pub fn set_write_protect_enable(&mut self, enable: bool) {
+        // /RBなのでEnalbe時にLow
+        self.wpb
+            .set_state(bsp::hal::gpio::PinState::from(!enable))
+            .unwrap();
+        trace!("Set Write Protect Enable: {}", enable);
+    }
+
     /// Set Function Pins
     /// command_latch: command latch (CLE)
     /// address_latch: address latch (ALE)
