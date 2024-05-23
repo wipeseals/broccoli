@@ -290,7 +290,7 @@ impl NandIoPins<'_> {
         mut delay_f: F,
         retry_count: u32,
     ) -> Result<(), Error> {
-        let mut busy: bool = !self.rbb.is_low().unwrap();
+        let mut busy: bool = self.rbb.is_low().unwrap();
         let mut count: u32 = 0;
         while busy {
             count += 1;
