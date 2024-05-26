@@ -9,6 +9,9 @@ jobs:
   building:
     name: Building
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./broccoli-app-rp2040
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@master

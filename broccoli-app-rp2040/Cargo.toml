@@ -1,11 +1,8 @@
 [package]
 edition = "2021"
-name = "broccoli"
+name = "broccoli-app-rp2040"
 version = "0.2.0"
 license = "MIT OR Apache-2.0"
-
-[workspace]
-members = ["broccoli-codec", "broccoli-datamap", "broccoli-nandio"]
 
 [dependencies]
 cortex-m = "0.7"
@@ -28,7 +25,7 @@ pio-proc = "0.2.2"
 # rp2040-hal = { version="0.9", features=["rt", "critical-section-impl"] }
 # rp2040-boot2 = "0.3"
 
-broccoli-nandio = { path = "broccoli-nandio" }
+broccoli-nandio = { path = "../broccoli-nandio" }
 
 # cargo build/run
 [profile.dev]
