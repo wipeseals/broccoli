@@ -26,6 +26,7 @@ pio-proc = "0.2.2"
 # rp2040-boot2 = "0.3"
 
 broccoli-nandio = { path = "../broccoli-nandio" }
+broccoli-nandio-rp2040 = { path = "../broccoli-nandio-rp2040" }
 
 # cargo build/run
 [profile.dev]
