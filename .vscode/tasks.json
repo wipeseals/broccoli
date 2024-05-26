@@ -6,27 +6,58 @@
         {
             "label": "run release",
             "type": "shell",
-            "command": "cargo run --release"
+            "command": "cargo run --release",
+            "options": {
+                "cwd": "${workspaceFolder}/broccoli-app-rp2040"
+            }
         },
         {
             "label": "build release",
             "type": "shell",
-            "command": "cargo build --release"
+            "command": "cargo build --release",
+            "options": {
+                "cwd": "${workspaceFolder}/broccoli-app-rp2040"
+            }
+        },
+        {
+            "label": "run debug",
+            "type": "shell",
+            "command": "cargo run",
+            "options": {
+                "cwd": "${workspaceFolder}/broccoli-app-rp2040"
+            }
+        },
+        {
+            "label": "build debug",
+            "type": "shell",
+            "command": "cargo build",
+            "options": {
+                "cwd": "${workspaceFolder}/broccoli-app-rp2040"
+            }
         },
         {
             "label": "fmt",
             "type": "shell",
-            "command": "cargo fmt -- --check"
+            "command": "cargo fmt -- --check",
+            "options": {
+                "cwd": "${workspaceFolder}/broccoli-app-rp2040"
+            }
         },
         {
             "label": "clippy",
             "type": "shell",
-            "command": "cargo clippy --all-features -- --deny=warnings"
+            "command": "cargo clippy --all-features -- --deny=warnings",
+            "options": {
+                "cwd": "${workspaceFolder}/broccoli-app-rp2040"
+            }
         },
         {
             "label": "clippy fix",
             "type": "shell",
-            "command": "cargo clippy --fix --allow-dirty --allow-staged --all-features -- --deny=warnings"
+            "command": "cargo clippy --fix --allow-dirty --allow-staged --all-features -- --deny=warnings",
+            "options": {
+                "cwd": "${workspaceFolder}/broccoli-app-rp2040"
+            }
         },
     ]
 }
