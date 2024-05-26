@@ -3,10 +3,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "preLaunchTask": "rust: cargo build",
+            "preLaunchTask": "build release",
             "type": "probe-rs-debug",
             "request": "launch",
-            "name": "rp2040-project",
+            "name": "run rp2040 --release",
             "cwd": "${workspaceFolder}",
             "chip": "rp2040",
             // RP2040 doesn't support connectUnderReset
@@ -28,7 +28,7 @@
             "coreConfigs": [
                 {
                     "coreIndex": 0,
-                    "programBinary": "target/thumbv6m-none-eabi/debug/broccoli",
+                    "programBinary": "${workspaceFolder}/broccoli-app-rp2040/target/thumbv6m-none-eabi/debug/broccoli-app-rp2040",
                     "chip": "RP2040",
                     // Uncomment this if you've downloaded the SVD from
                     // https://github.com/raspberrypi/pico-sdk/raw/1.3.1/src/rp2040/hardware_regs/rp2040.svd
@@ -42,8 +42,8 @@
                     },
                 }
             ],
-            "consoleLogLevel": "Info", //Error, Warn, Info, Debug, Trace
+            "consoleLogLevel": "Debug", //Error, Warn, Info, Debug, Trace
             "wireProtocol": "Swd"
         }
-    ]
+  ]
 }
