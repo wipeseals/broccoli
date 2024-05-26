@@ -290,7 +290,7 @@ impl NandIoPins<'_> {
         mut delay_f: F,
         retry_count: u32,
     ) -> Result<(), Error> {
-        let mut busy: bool = !self.rbb.is_low().unwrap();
+        let mut busy: bool = self.rbb.is_low().unwrap();
         let mut count: u32 = 0;
         while busy {
             count += 1;
@@ -304,6 +304,16 @@ impl NandIoPins<'_> {
         }
         trace!("Wait for Busy: count: {}", count);
         Ok(())
+    }
+
+    /// Set Write Protect Enable
+    /// enable: write protect enable
+    pub fn set_write_protect_enable(&mut self, enable: bool) {
+        // /RBなのでEnalbe時にLow
+        self.wpb
+            .set_state(bsp::hal::gpio::PinState::from(!enable))
+            .unwrap();
+        trace!("Set Write Protect Enable: {}", enable);
     }
 
     /// Set Function Pins

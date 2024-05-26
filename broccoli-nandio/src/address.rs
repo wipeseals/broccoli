@@ -40,24 +40,24 @@ pub const MIN_BYTES_PER_IC: usize = MIN_BLOCKS_PER_IC * BYTES_PER_BLOCK;
 ///
 /// CAx: Column Address
 /// PAx: Page Address
-///   PA15~PA8: Block Address
+///   PA15~PA6: Block Address
 pub struct Address {
     /// Column Address 12bit (15,14,13,12: unused)
     pub column: u16,
-    /// Page Address 16bit (Block Address 8bit + Page Address 8bit)
+    /// Page Address 16bit (Block Address 12bit + Page Address 6bit)
     pub page: u16,
 }
 
 impl Address {
-    /// Get Block Address (PA15~PA8)
+    /// Get Block Address (PA15~PA6)
     pub fn to_block_address(&self) -> u8 {
-        (self.page >> 8) as u8
+        (self.page >> 6) as u8
     }
     /// Create Address from Block Address
     pub fn from_block_address(block: u8) -> Self {
         Address {
             column: 0,
-            page: (block as u16) << 8,
+            page: (block as u16) << 6,
         }
     }
     /// Pack Address into u32 data. (Column: 0~15, Page: 16~31)
