@@ -46,6 +46,7 @@ pub const MIN_BYTES_PER_IC: usize = MIN_BLOCKS_PER_IC * BYTES_PER_BLOCK;
 ///   PA15~PA6: Block Address
 
 bitfield! {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
     pub struct Address(u32);
     pub column, set_column: 11,0;
     pub reserved, _: 15,12;
@@ -72,5 +73,40 @@ impl Address {
             | ((slice[2] as u32) << 16)
             | ((slice[3] as u32) << 24);
         Address(data)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pack_slice() {
+        let mut address = Address::default();
+        address.set_column(0b101010101010);
+        address.set_page(0b110011001100);
+        address.set_block(0b111100001111);
+        let packed = address.pack_slice();
+        let expect_value: u32 = 0b_1100001111_001100_0000_101010101010;
+        //                         block      page  rsv   column
+        //                         10bit      6bit  4bit  12bit
+        let expect_packed = [
+            (expect_value & 0xFF) as u8,
+            ((expect_value >> 8) & 0xFF) as u8,
+            ((expect_value >> 16) & 0xFF) as u8,
+            ((expect_value >> 24) & 0xFF) as u8,
+        ];
+        assert_eq!(packed, expect_packed);
+    }
+
+    #[test]
+    fn test_unpack_slice() {
+        let packed = [0b10101010, 0b11001100, 0b11110000, 0b11111111];
+        //                     column[7:0]  column[12:9]  block[1:0] block[15:2]
+        //                                                page[5:0]
+        let address = Address::unpack_slice(&packed);
+        assert_eq!(address.column(), 0b0000_1100_10101010);
+        assert_eq!(address.page(), 0b110000);
+        assert_eq!(address.block(), 0b11111111_11);
     }
 }
