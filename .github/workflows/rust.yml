@@ -45,6 +45,11 @@ jobs:
           override: true
           components: rustfmt, clippy
 
+      # need refer to .cargo directory
+      - name: Build
+        run: cargo build --verbose --path .
+        working-directory: ${{ matrix.crate }}
+
       - name: Check formatting
         uses: actions-rs/cargo@v1
         with:
