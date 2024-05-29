@@ -1,6 +1,16 @@
 name: Test Broccoli PIO NandIO
 
-on: [push, pull_request]
+on:
+  push:
+    branches: ["main", "develop"]
+    paths:
+      - "**.ipynb"
+      - "**.pio"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "**.ipynb"
+      - "**.pio"
 
 jobs:
   testing:
