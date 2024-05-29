@@ -46,6 +46,7 @@ jobs:
           target: thumbv6m-none-eabi
           override: true
           components: rustfmt, clippy
+      - run: rustup target add thumbv6m-none-eabi
       - run: cargo install flip-link
 
       # need refer to .cargo directory
