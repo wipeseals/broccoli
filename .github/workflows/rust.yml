@@ -42,8 +42,10 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          target: thumbv6m-none-eabi
           override: true
           components: rustfmt, clippy
+      - run: cargo install flip-link
 
       # need refer to .cargo directory
       - name: Build Debug
