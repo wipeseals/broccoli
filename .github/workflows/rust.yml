@@ -1,6 +1,7 @@
 name: Rust
 
 on:
+  workflow_dispatch:
   push:
     branches: ["main", "develop"]
     paths:
@@ -42,8 +43,23 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          target: thumbv6m-none-eabi
           override: true
           components: rustfmt, clippy
+
+      # todo: use thumbv6m-none-eabi
+      # - run: rustup target add thumbv6m-none-eabi
+      # - run: cargo install flip-link
+
+      # # need refer to .cargo directory
+      # - name: Build Debug
+      #   run: cargo build --verbose
+      #   working-directory: ${{ matrix.crate }}
+
+      # # need refer to .cargo directory
+      # - name: Build Release
+      #   run: cargo build --release --verbose
+      #   working-directory: ${{ matrix.crate }}
 
       - name: Check formatting
         uses: actions-rs/cargo@v1

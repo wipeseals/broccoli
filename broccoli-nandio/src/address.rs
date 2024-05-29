@@ -1,6 +1,9 @@
 #![allow(unused, dead_code)]
 #![cfg_attr(not(test), no_std)]
 
+extern crate bitfield;
+use bitfield::bitfield;
+
 /// Usable NAND Page Size
 pub const DATA_BYTES_PER_PAGE: usize = 2048;
 /// Metadata on NAND Page
@@ -41,45 +44,20 @@ pub const MIN_BYTES_PER_IC: usize = MIN_BLOCKS_PER_IC * BYTES_PER_BLOCK;
 /// CAx: Column Address
 /// PAx: Page Address
 ///   PA15~PA6: Block Address
-pub struct Address {
-    /// Column Address 12bit (15,14,13,12: unused)
-    pub column: u16,
-    /// Page Address 16bit (Block Address 12bit + Page Address 6bit)
-    pub page: u16,
+
+bitfield! {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+    pub struct Address(u32);
+    pub column, set_column: 11,0;
+    pub reserved, _: 15,12;
+    pub page, set_page: 21,16;
+    pub block, set_block: 31,22;
 }
 
 impl Address {
-    /// Get Block Address (PA15~PA6)
-    pub fn to_block_address(&self) -> u8 {
-        (self.page >> 6) as u8
-    }
-    /// Create Address from Block Address
-    pub fn from_block_address(block: u8) -> Self {
-        Address {
-            column: 0,
-            page: (block as u16) << 6,
-        }
-    }
-    /// Pack Address into u32 data. (Column: 0~15, Page: 16~31)
-    pub fn pack_u32(&self) -> u32 {
-        let mut data = 0u32;
-        // 1st, 2nd (column)
-        data |= self.column as u32;
-        // 3rd, 4th (page)
-        data |= (self.page as u32) << 16;
-        data
-    }
-
-    /// Unpack u32 data into Address. (Column: 0~15, Page: 16~31)
-    pub fn unpack_u32(data: u32) -> Self {
-        let column = (data & 0x0000_ffff) as u16;
-        let page = ((data & 0xffff_0000) >> 16) as u16;
-        Address { column, page }
-    }
-
     /// Pack Address into slice. (Column: 0~15, Page: 16~31)
     pub fn pack_slice(&self) -> [u8; 4] {
-        let data = self.pack_u32();
+        let data = self.0;
         let mut slice = [0u8; 4];
         slice[0] = data as u8;
         slice[1] = (data >> 8) as u8;
@@ -94,6 +72,41 @@ impl Address {
             | ((slice[1] as u32) << 8)
             | ((slice[2] as u32) << 16)
             | ((slice[3] as u32) << 24);
-        Address::unpack_u32(data)
+        Address(data)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pack_slice() {
+        let mut address = Address::default();
+        address.set_column(0b101010101010);
+        address.set_page(0b110011001100);
+        address.set_block(0b111100001111);
+        let packed = address.pack_slice();
+        let expect_value: u32 = 0b_1100001111_001100_0000_101010101010;
+        //                         block      page  rsv   column
+        //                         10bit      6bit  4bit  12bit
+        let expect_packed = [
+            (expect_value & 0xFF) as u8,
+            ((expect_value >> 8) & 0xFF) as u8,
+            ((expect_value >> 16) & 0xFF) as u8,
+            ((expect_value >> 24) & 0xFF) as u8,
+        ];
+        assert_eq!(packed, expect_packed);
+    }
+
+    #[test]
+    fn test_unpack_slice() {
+        let packed = [0b10101010, 0b11001100, 0b11110000, 0b11111111];
+        //                     column[7:0]  column[12:9]  block[1:0] block[15:2]
+        //                                                page[5:0]
+        let address = Address::unpack_slice(&packed);
+        assert_eq!(address.column(), 0b0000_1100_10101010);
+        assert_eq!(address.page(), 0b110000);
+        assert_eq!(address.block(), 0b11111111_11);
     }
 }

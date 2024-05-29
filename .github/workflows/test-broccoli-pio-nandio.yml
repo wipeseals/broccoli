@@ -1,6 +1,7 @@
 name: Test Broccoli PIO NandIO
 
 on:
+  workflow_dispatch:
   push:
     branches: ["main", "develop"]
     paths:

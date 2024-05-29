@@ -1,7 +1,12 @@
 #![allow(unused, dead_code)]
 #![cfg_attr(not(test), no_std)]
 
+extern crate bit_field;
+extern crate bitflags;
+
 use crate::address::Address;
+use bit_field::BitField;
+use bitflags::bitflags;
 
 /// ID read bytes
 pub const ID_READ_CMD_BYTES: usize = 5;
@@ -43,35 +48,76 @@ pub enum CommandId {
 /// | 5   | Page Buffer Ready/Busy | Ready: 1, Busy: 0          |
 /// | 6   | Data Cache Ready/Busy  | Ready: 1, Busy: 0          |
 /// | 7   | Write Protect          | Not Protect: 1, Protect: 0 |
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct StatusOutput {
-    pub data: u8,
+
+bitflags! {
+    #[derive(Default, Clone, Copy, PartialEq)]
+    pub struct StatusOutput: u8 {
+        const CHIP_STATUS0_FAIL = 0b0000_0001;
+        const CHIP_STATUS1_FAIL = 0b0000_0010;
+        const PAGE_BUFFER_READY = 0b0010_0000;
+        const DATA_CACHE_READY = 0b0100_0000;
+        const WRITE_PROTECT_DISABLE = 0b1000_0000;
+    }
 }
 
 impl StatusOutput {
-    /// Check if chip is pass
-    ///  - chip_num: 0 or 1
     pub fn is_pass(&self, chip_num: u32) -> bool {
         match chip_num {
-            0 => self.data & 0b0000_0001 == 0,
-            1 => self.data & 0b0000_0010 == 0,
+            0 => (*self & StatusOutput::CHIP_STATUS0_FAIL).is_empty(),
+            1 => (*self & StatusOutput::CHIP_STATUS1_FAIL).is_empty(),
             _ => core::unreachable!("Invalid chip number"),
         }
     }
 
     /// Check if page buffer is ready
     pub fn is_page_buffer_ready(&self) -> bool {
-        self.data & 0b0010_0000 != 0
+        !(*self & StatusOutput::PAGE_BUFFER_READY).is_empty()
     }
 
     /// Check if data cache is ready
     pub fn is_data_cache_ready(&self) -> bool {
-        self.data & 0b0100_0000 != 0
+        !(*self & StatusOutput::DATA_CACHE_READY).is_empty()
     }
 
     /// Check if write protect is enabled
     pub fn is_write_protect(&self) -> bool {
-        self.data & 0b1000_0000 == 0
+        !(*self & StatusOutput::WRITE_PROTECT_DISABLE).is_empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_status_output_with_different_values() {
+        let status = StatusOutput::from_bits_truncate(0b00000000);
+        assert!(status.is_pass(0));
+        assert!(status.is_pass(1));
+        assert!(!status.is_page_buffer_ready());
+        assert!(!status.is_data_cache_ready());
+        assert!(!status.is_write_protect());
+
+        let status = StatusOutput::from_bits_truncate(0b11111111);
+        assert!(!status.is_pass(0));
+        assert!(!status.is_pass(1));
+        assert!(status.is_page_buffer_ready());
+        assert!(status.is_data_cache_ready());
+        assert!(status.is_write_protect());
+
+        let status = StatusOutput::from_bits_truncate(0b10101010);
+        assert!(status.is_pass(0));
+        assert!(!status.is_pass(1));
+        assert!(status.is_page_buffer_ready());
+        assert!(!status.is_data_cache_ready());
+        assert!(status.is_write_protect());
+
+        let status = StatusOutput::from_bits_truncate(0b01010101);
+        assert!(!status.is_pass(0));
+        assert!(status.is_pass(1));
+        assert!(!status.is_page_buffer_ready());
+        assert!(status.is_data_cache_ready());
+        assert!(!status.is_write_protect());
     }
 }
 
