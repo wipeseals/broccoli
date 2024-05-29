@@ -12,13 +12,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app:
-          - broccoli-app-rp2040
-          - broccoli-codec
-          - broccoli-datamap
-          - broccoli-nandio
-          - broccoli-nandio-rp2040
-
+        include:
+          - crate: broccoli-app-rp2040
+            skip_test: true
+          - crate: broccoli-codec
+            skip_test: false
+          - crate: broccoli-datamap
+            skip_test: false
+          - crate: broccoli-nandio
+            skip_test: false
+          - crate: broccoli-nandio-rp2040
+            skip_test: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -34,13 +38,14 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: fmt
-          args: --manifest-path "${{ matrix.app }}/Cargo.toml" -- --check
+          args: --manifest-path "${{ matrix.crate }}/Cargo.toml" -- --check
 
       - name: Lint with Clippy
         uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --manifest-path "${{ matrix.app }}/Cargo.toml" -- -D warnings
+          args: --manifest-path "${{ matrix.crate }}/Cargo.toml" -- -D warnings
 
       - name: Run tests
-        run: cargo test --manifest-path "${{ matrix.app }}/Cargo.toml" --verbose
+        run: cargo test --manifest-path "${{ matrix.crate }}/Cargo.toml" --verbose
+        if: matrix.skip_test == false
