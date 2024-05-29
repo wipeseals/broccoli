@@ -33,13 +33,13 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: fmt
-          args: -- --check --manifest-path "${{ matrix.app }}/Cargo.toml"
+          args: --manifest-path "${{ matrix.app }}/Cargo.toml" -- --check
 
       - name: Lint with Clippy
         uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: -- -D warnings  --manifest-path "${{ matrix.app }}/Cargo.toml"
+          args: --manifest-path "${{ matrix.app }}/Cargo.toml" -- -D warnings
 
       - name: Run tests
         uses: actions-rs/cargo@v1
