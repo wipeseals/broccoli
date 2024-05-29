@@ -1,6 +1,9 @@
 #![allow(unused, dead_code)]
 #![cfg_attr(not(test), no_std)]
 
+extern crate bitfield;
+use bitfield::bitfield;
+
 /// Usable NAND Page Size
 pub const DATA_BYTES_PER_PAGE: usize = 2048;
 /// Metadata on NAND Page
@@ -41,45 +44,19 @@ pub const MIN_BYTES_PER_IC: usize = MIN_BLOCKS_PER_IC * BYTES_PER_BLOCK;
 /// CAx: Column Address
 /// PAx: Page Address
 ///   PA15~PA6: Block Address
-pub struct Address {
-    /// Column Address 12bit (15,14,13,12: unused)
-    pub column: u16,
-    /// Page Address 16bit (Block Address 12bit + Page Address 6bit)
-    pub page: u16,
+
+bitfield! {
+    pub struct Address(u32);
+    pub column, set_column: 11,0;
+    pub reserved, _: 15,12;
+    pub page, set_page: 21,16;
+    pub block, set_block: 31,22;
 }
 
 impl Address {
-    /// Get Block Address (PA15~PA6)
-    pub fn to_block_address(&self) -> u8 {
-        (self.page >> 6) as u8
-    }
-    /// Create Address from Block Address
-    pub fn from_block_address(block: u8) -> Self {
-        Address {
-            column: 0,
-            page: (block as u16) << 6,
-        }
-    }
-    /// Pack Address into u32 data. (Column: 0~15, Page: 16~31)
-    pub fn pack_u32(&self) -> u32 {
-        let mut data = 0u32;
-        // 1st, 2nd (column)
-        data |= self.column as u32;
-        // 3rd, 4th (page)
-        data |= (self.page as u32) << 16;
-        data
-    }
-
-    /// Unpack u32 data into Address. (Column: 0~15, Page: 16~31)
-    pub fn unpack_u32(data: u32) -> Self {
-        let column = (data & 0x0000_ffff) as u16;
-        let page = ((data & 0xffff_0000) >> 16) as u16;
-        Address { column, page }
-    }
-
     /// Pack Address into slice. (Column: 0~15, Page: 16~31)
     pub fn pack_slice(&self) -> [u8; 4] {
-        let data = self.pack_u32();
+        let data = self.0;
         let mut slice = [0u8; 4];
         slice[0] = data as u8;
         slice[1] = (data >> 8) as u8;
@@ -94,6 +71,6 @@ impl Address {
             | ((slice[1] as u32) << 8)
             | ((slice[2] as u32) << 16)
             | ((slice[3] as u32) << 24);
-        Address::unpack_u32(data)
+        Address(data)
     }
 }
