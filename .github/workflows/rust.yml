@@ -47,5 +47,8 @@ jobs:
           args: --manifest-path "${{ matrix.crate }}/Cargo.toml" -- -D warnings
 
       - name: Run tests
-        run: cargo test --manifest-path "${{ matrix.crate }}/Cargo.toml" --verbose
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --manifest-path "${{ matrix.crate }}/Cargo.toml" --verbose
         if: matrix.skip_test == false
