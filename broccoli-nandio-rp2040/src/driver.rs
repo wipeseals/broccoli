@@ -102,7 +102,7 @@ impl Driver for Rp2040Driver<'_> {
         self.nandio_pins.deassert_cs();
 
         trace!("Status Read: {:02x}", status[0]);
-        StatusOutput { data: status[0] }
+        StatusOutput::from_bits_truncate(status[0])
     }
 
     /// Read NAND IC data

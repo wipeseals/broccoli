@@ -18,6 +18,10 @@ rp-pico = "0.8"
 pio = "0.2.1"
 pio-proc = "0.2.2"
 
+bitflags = "2.5.0"
+bit_field = "0.10.2"
+bitfield = "0.15.0"
+
 # but you can use any BSP. Uncomment this to use the pro_micro_rp2040 BSP instead
 # sparkfun-pro-micro-rp2040 = "0.7"
 
