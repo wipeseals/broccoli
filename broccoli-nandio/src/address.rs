@@ -64,7 +64,7 @@ impl Address {
     pub fn pack_u32(&self) -> u32 {
         let mut data = 0u32;
         // 1st, 2nd (column)
-        data |= (self.column as u32) << 0;
+        data |= self.column as u32;
         // 3rd, 4th (page)
         data |= (self.page as u32) << 16;
         data
@@ -81,7 +81,7 @@ impl Address {
     pub fn pack_slice(&self) -> [u8; 4] {
         let data = self.pack_u32();
         let mut slice = [0u8; 4];
-        slice[0] = (data >> 0) as u8;
+        slice[0] = data as u8;
         slice[1] = (data >> 8) as u8;
         slice[2] = (data >> 16) as u8;
         slice[3] = (data >> 24) as u8;

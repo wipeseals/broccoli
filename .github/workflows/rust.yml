@@ -1,0 +1,66 @@
+name: Rust
+
+on:
+  push:
+    branches: ["main", "develop"]
+    paths:
+      - "**.rs"
+      - "**.toml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "**.rs"
+      - "**.toml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - crate: broccoli-app-rp2040
+            skip_clippy: true
+            skip_test: true
+          - crate: broccoli-codec
+            skip_clippy: false
+            skip_test: false
+          - crate: broccoli-datamap
+            skip_clippy: false
+            skip_test: false
+          - crate: broccoli-nandio
+            skip_clippy: false
+            skip_test: false
+          - crate: broccoli-nandio-rp2040
+            skip_clippy: false
+            skip_test: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --manifest-path "${{ matrix.crate }}/Cargo.toml" -- --check
+
+      - name: Lint with Clippy
+        uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --manifest-path "${{ matrix.crate }}/Cargo.toml" -- -D warnings
+        if: matrix.skip_clippy == false
+
+      - name: Run tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --manifest-path "${{ matrix.crate }}/Cargo.toml" --verbose
+        if: matrix.skip_test == false
