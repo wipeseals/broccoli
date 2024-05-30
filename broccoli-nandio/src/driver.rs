@@ -151,14 +151,14 @@ pub trait Driver {
         cs_index: u32,
         address: Address,
         read_data_ref: &mut [u8],
-        read_bytes: u32,
+        read_bytes: usize,
     ) -> Result<(), Error>;
     fn read_data_async(
         &mut self,
         cs_index: u32,
         address: Address,
         read_data_ref: &mut [u8],
-        read_bytes: u32,
+        read_bytes: usize,
     ) -> impl Future<Output = Result<(), Error>>;
 
     /// Read NAND IC status
@@ -179,13 +179,13 @@ pub trait Driver {
         cs_index: u32,
         address: Address,
         write_data_ref: &[u8],
-        write_bytes: u32,
+        write_bytes: usize,
     ) -> Result<StatusOutput, Error>;
     fn write_data_async(
         &mut self,
         cs_index: u32,
         address: Address,
         write_data_ref: &[u8],
-        write_bytes: u32,
+        write_bytes: usize,
     ) -> impl Future<Output = Result<StatusOutput, Error>>;
 }

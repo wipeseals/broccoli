@@ -62,9 +62,13 @@ bitfield! {
 }
 
 impl Address {
+    pub fn raw(&self) -> u32 {
+        self.0
+    }
+
     /// Pack Address into slice.
     pub fn to_full_slice(&self) -> [u8; 4] {
-        let data = self.0;
+        let data = self.raw();
         let mut slice = [0u8; 4];
         slice[0] = data as u8;
         slice[1] = (data >> 8) as u8;
@@ -84,7 +88,7 @@ impl Address {
 
     /// Pack Page Address into slice.
     pub fn to_page_slice(&self) -> [u8; 2] {
-        let data = self.0;
+        let data = self.raw();
         let mut slice = [0u8; 2];
         // PA7~PA0
         slice[0] = (data >> 16) as u8;
