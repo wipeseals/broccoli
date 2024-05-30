@@ -134,10 +134,10 @@ pub trait Driver {
     fn reset(&mut self, cs_index: u32);
 
     /// Read NAND IC ID
-    fn id_read(&mut self, cs_index: u32) -> (bool, [u8; 5]);
+    fn read_id(&mut self, cs_index: u32) -> (bool, [u8; 5]);
 
     /// Read NAND IC status
-    fn status_read(&mut self, cs_index: u32) -> StatusOutput;
+    fn read_status(&mut self, cs_index: u32) -> StatusOutput;
 
     /// Read NAND IC data
     fn read_data(

@@ -61,7 +61,7 @@ impl Driver for Rp2040Driver<'_> {
     }
 
     /// Read NAND IC ID
-    fn id_read(&mut self, cs_index: u32) -> (bool, [u8; 5]) {
+    fn read_id(&mut self, cs_index: u32) -> (bool, [u8; 5]) {
         let mut id_read_results = [0x00, 0x00, 0x00, 0x00, 0x00];
 
         self.nandio_pins.assert_cs(cs_index);
@@ -88,7 +88,7 @@ impl Driver for Rp2040Driver<'_> {
     }
 
     /// Read NAND IC status
-    fn status_read(&mut self, cs_index: u32) -> StatusOutput {
+    fn read_status(&mut self, cs_index: u32) -> StatusOutput {
         let mut status = [0x00];
 
         self.nandio_pins.assert_cs(cs_index);

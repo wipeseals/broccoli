@@ -68,7 +68,7 @@ fn main() -> ! {
         // Reset
         nandio_driver.reset(cs_index);
         // ID Read
-        let (read_ok, id_read_data) = nandio_driver.id_read(cs_index);
+        let (read_ok, id_read_data) = nandio_driver.read_id(cs_index);
 
         // check ID
         info!(
