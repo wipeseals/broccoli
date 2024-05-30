@@ -1,6 +1,8 @@
 #![allow(unused, dead_code)]
 #![cfg_attr(not(test), no_std)]
 
+use core::future::Future;
+
 use defmt::{trace, warn};
 
 extern crate broccoli_nandio;
@@ -38,11 +40,11 @@ pub const RESOLUTION_COUNT_FOR_WAIT_BUSY: u32 = 10;
 pub const RETRY_LIMIT_COUNT_FOR_WAIT_BUSY: u32 = 10 * RESOLUTION_COUNT_FOR_WAIT_BUSY;
 
 /// NAND IC Command Driver
-pub struct Rp2040Driver<'a> {
+pub struct Rp2040FwDriver<'a> {
     pub nandio_pins: &'a mut NandIoPins<'a>,
     pub delay: &'a mut cortex_m::delay::Delay,
 }
-impl Driver for Rp2040Driver<'_> {
+impl Driver for Rp2040FwDriver<'_> {
     /// Initialize all pins
     fn init_pins(&mut self) {
         self.nandio_pins.init_all_pin();
@@ -61,7 +63,7 @@ impl Driver for Rp2040Driver<'_> {
     }
 
     /// Read NAND IC ID
-    fn read_id(&mut self, cs_index: u32) -> (bool, [u8; 5]) {
+    fn read_id(&mut self, cs_index: u32) -> (bool, [u8; ID_READ_CMD_BYTES]) {
         let mut id_read_results = [0x00, 0x00, 0x00, 0x00, 0x00];
 
         self.nandio_pins.assert_cs(cs_index);
@@ -146,5 +148,34 @@ impl Driver for Rp2040Driver<'_> {
                 Err(Error::Timeout)
             }
         }
+    }
+
+    fn init_pins_async(&mut self) -> impl Future<Output = ()> {
+        async { self.init_pins() }
+    }
+
+    fn reset_async(&mut self, cs_index: u32) -> impl Future<Output = ()> {
+        async move { self.reset(cs_index) }
+    }
+
+    fn read_id_async(
+        &mut self,
+        cs_index: u32,
+    ) -> impl Future<Output = (bool, [u8; ID_READ_CMD_BYTES])> {
+        async move { self.read_id(cs_index) }
+    }
+
+    fn read_status_async(&mut self, cs_index: u32) -> impl Future<Output = StatusOutput> {
+        async move { self.read_status(cs_index) }
+    }
+
+    fn read_data_async(
+        &mut self,
+        cs_index: u32,
+        address: Address,
+        read_data_ref: &mut [u8],
+        read_bytes: u32,
+    ) -> impl Future<Output = Result<(), Error>> {
+        async move { self.read_data(cs_index, address, read_data_ref, read_bytes) }
     }
 }

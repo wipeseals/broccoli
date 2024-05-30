@@ -4,6 +4,8 @@
 extern crate bit_field;
 extern crate bitflags;
 
+use core::future::Future;
+
 use crate::address::Address;
 use bit_field::BitField;
 use bitflags::bitflags;
@@ -20,7 +22,7 @@ pub const ID_READ_CMD_BYTES: usize = 5;
 /// | Chip Number, Cell Type | 0x80     |
 /// | Page Size, Block Size  | 0x15     |
 /// | District Number        | 0x72     |
-pub const ID_READ_EXPECT_DATA: [u8; 5] = [0x98, 0xF1, 0x80, 0x15, 0x72];
+pub const ID_READ_EXPECT_DATA: [u8; ID_READ_CMD_BYTES] = [0x98, 0xF1, 0x80, 0x15, 0x72];
 
 /// NAND IC Command ID
 #[repr(u8)]
@@ -129,15 +131,19 @@ pub enum Error {
 pub trait Driver {
     /// Initialize all pins
     fn init_pins(&mut self);
+    fn init_pins_async(&mut self) -> impl Future<Output = ()>;
 
     /// Reset NAND IC
     fn reset(&mut self, cs_index: u32);
+    fn reset_async(&mut self, cs_index: u32) -> impl Future<Output = ()>;
 
     /// Read NAND IC ID
-    fn read_id(&mut self, cs_index: u32) -> (bool, [u8; 5]);
+    fn read_id(&mut self, cs_index: u32) -> (bool, [u8; ID_READ_CMD_BYTES]);
+    fn read_id_async(&mut self, cs_index: u32) -> impl Future<Output = (bool, [u8; 5])>;
 
     /// Read NAND IC status
     fn read_status(&mut self, cs_index: u32) -> StatusOutput;
+    fn read_status_async(&mut self, cs_index: u32) -> impl Future<Output = StatusOutput>;
 
     /// Read NAND IC data
     fn read_data(
@@ -147,4 +153,11 @@ pub trait Driver {
         read_data_ref: &mut [u8],
         read_bytes: u32,
     ) -> Result<(), Error>;
+    fn read_data_async(
+        &mut self,
+        cs_index: u32,
+        address: Address,
+        read_data_ref: &mut [u8],
+        read_bytes: u32,
+    ) -> impl Future<Output = Result<(), Error>>;
 }

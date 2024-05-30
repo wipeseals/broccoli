@@ -5,7 +5,7 @@
 extern crate broccoli_nandio;
 extern crate broccoli_nandio_rp2040;
 
-use broccoli_nandio_rp2040::{driver::Rp2040Driver, init_nandio_pins};
+use broccoli_nandio_rp2040::{driver::Rp2040FwDriver, init_nandio_pins};
 use bsp::entry;
 
 use defmt::*;
@@ -58,7 +58,7 @@ fn main() -> ! {
     let mut led_pin = pins.led.into_push_pull_output();
     // assign nandio pins (gpio0~gpio15)
     let mut nandio_pins = init_nandio_pins!(pins);
-    let mut nandio_driver = Rp2040Driver {
+    let mut nandio_driver = Rp2040FwDriver {
         nandio_pins: &mut nandio_pins,
         delay: &mut delay,
     };
