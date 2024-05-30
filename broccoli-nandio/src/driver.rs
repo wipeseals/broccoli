@@ -133,6 +133,10 @@ pub trait Driver {
     fn init_pins(&mut self);
     fn init_pins_async(&mut self) -> impl Future<Output = ()>;
 
+    /// Set write protect
+    fn set_write_protect(&mut self, enable: bool);
+    fn set_write_protect_async(&mut self, enable: bool) -> impl Future<Output = ()>;
+
     /// Reset NAND IC
     fn reset(&mut self, cs_index: u32);
     fn reset_async(&mut self, cs_index: u32) -> impl Future<Output = ()>;
@@ -140,10 +144,6 @@ pub trait Driver {
     /// Read NAND IC ID
     fn read_id(&mut self, cs_index: u32) -> (bool, [u8; ID_READ_CMD_BYTES]);
     fn read_id_async(&mut self, cs_index: u32) -> impl Future<Output = (bool, [u8; 5])>;
-
-    /// Read NAND IC status
-    fn read_status(&mut self, cs_index: u32) -> StatusOutput;
-    fn read_status_async(&mut self, cs_index: u32) -> impl Future<Output = StatusOutput>;
 
     /// Read NAND IC data
     fn read_data(
@@ -160,4 +160,32 @@ pub trait Driver {
         read_data_ref: &mut [u8],
         read_bytes: u32,
     ) -> impl Future<Output = Result<(), Error>>;
+
+    /// Read NAND IC status
+    fn read_status(&mut self, cs_index: u32) -> StatusOutput;
+    fn read_status_async(&mut self, cs_index: u32) -> impl Future<Output = StatusOutput>;
+
+    /// Erase NAND IC block
+    fn erase_block(&mut self, cs_index: u32, address: Address) -> Result<StatusOutput, Error>;
+    fn erase_block_async(
+        &mut self,
+        cs_index: u32,
+        address: Address,
+    ) -> impl Future<Output = Result<StatusOutput, Error>>;
+
+    /// Write NAND IC data
+    fn write_data(
+        &mut self,
+        cs_index: u32,
+        address: Address,
+        write_data_ref: &[u8],
+        write_bytes: u32,
+    ) -> Result<StatusOutput, Error>;
+    fn write_data_async(
+        &mut self,
+        cs_index: u32,
+        address: Address,
+        write_data_ref: &[u8],
+        write_bytes: u32,
+    ) -> impl Future<Output = Result<StatusOutput, Error>>;
 }

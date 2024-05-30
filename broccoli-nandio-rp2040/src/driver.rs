@@ -59,7 +59,7 @@ impl Driver for Rp2040FwDriver<'_> {
         });
         self.nandio_pins.deassert_cs();
         self.delay.delay_us(DELAY_US_FOR_RESET);
-        trace!("Reset NAND IC")
+        trace!("Reset: cs={}", cs_index);
     }
 
     /// Read NAND IC ID
@@ -103,7 +103,7 @@ impl Driver for Rp2040FwDriver<'_> {
         });
         self.nandio_pins.deassert_cs();
 
-        trace!("Status Read: {:02x}", status[0]);
+        trace!("Status Read: cs={}, status={:02x}", cs_index, status[0]);
         StatusOutput::from_bits_truncate(status[0])
     }
 
@@ -120,9 +120,10 @@ impl Driver for Rp2040FwDriver<'_> {
             .input_command(CommandId::ReadFirst as u8, || {
                 self.delay.delay_us(DELAY_US_FOR_COMMAND_LATCH)
             });
-        self.nandio_pins.input_address(&address.pack_slice(), || {
-            self.delay.delay_us(DELAY_US_FOR_COMMAND_LATCH)
-        });
+        self.nandio_pins
+            .input_address(&address.to_full_slice(), || {
+                self.delay.delay_us(DELAY_US_FOR_COMMAND_LATCH)
+            });
         self.nandio_pins
             .input_command(CommandId::ReadSecond as u8, || {
                 self.delay.delay_us(DELAY_US_FOR_COMMAND_LATCH)
@@ -139,11 +140,11 @@ impl Driver for Rp2040FwDriver<'_> {
                     });
                 self.nandio_pins.deassert_cs();
 
-                trace!("Read OK");
+                trace!("Read OK: cs={} address={:08x}", cs_index, address);
                 Ok(())
             }
             Err(_) => {
-                warn!("Timeout for read data");
+                warn!("Read Timeout: cs={} address={:08x}", cs_index, address);
                 self.nandio_pins.deassert_cs();
                 Err(Error::Timeout)
             }
@@ -177,5 +178,87 @@ impl Driver for Rp2040FwDriver<'_> {
         read_bytes: u32,
     ) -> impl Future<Output = Result<(), Error>> {
         async move { self.read_data(cs_index, address, read_data_ref, read_bytes) }
+    }
+
+    fn set_write_protect(&mut self, enable: bool) {
+        self.nandio_pins.set_write_protect_enable(enable);
+    }
+
+    fn set_write_protect_async(&mut self, enable: bool) -> impl Future<Output = ()> {
+        async move { self.set_write_protect(enable) }
+    }
+
+    fn erase_block(&mut self, cs_index: u32, address: Address) -> Result<StatusOutput, Error> {
+        self.nandio_pins.assert_cs(cs_index);
+        self.nandio_pins
+            .input_command(CommandId::AutoBlockEraseFirst as u8, || {
+                self.delay.delay_us(DELAY_US_FOR_COMMAND_LATCH)
+            });
+        self.nandio_pins
+            .input_address(&address.to_page_slice(), || {
+                self.delay.delay_us(DELAY_US_FOR_COMMAND_LATCH)
+            });
+        self.nandio_pins
+            .input_command(CommandId::AutoBlockEraseSecond as u8, || {
+                self.delay.delay_us(DELAY_US_FOR_COMMAND_LATCH)
+            });
+
+        match self.nandio_pins.wait_for_busy(
+            || self.delay.delay_us(DELAY_US_FOR_WAIT_BUSY_READ),
+            RETRY_LIMIT_COUNT_FOR_WAIT_BUSY,
+        ) {
+            Ok(_) => {
+                let mut status = [0x00];
+                self.nandio_pins
+                    .input_command(CommandId::StatusRead as u8, || {
+                        self.delay.delay_us(DELAY_US_FOR_COMMAND_LATCH)
+                    });
+                self.nandio_pins.output_data(&mut status, 1, || {
+                    self.delay.delay_us(DELAY_US_FOR_COMMAND_LATCH)
+                });
+                self.nandio_pins.deassert_cs();
+                trace!(
+                    "Erase: cs={} address={:08x} status={}",
+                    cs_index,
+                    address,
+                    status[0]
+                );
+
+                Ok(StatusOutput::from_bits_truncate(status[0]))
+            }
+            Err(_) => {
+                self.nandio_pins.deassert_cs();
+                warn!("Erase Timeout: cs={} address={:08x}", cs_index, address);
+                Err(Error::Timeout)
+            }
+        }
+    }
+
+    fn erase_block_async(
+        &mut self,
+        cs_index: u32,
+        address: Address,
+    ) -> impl Future<Output = Result<StatusOutput, Error>> {
+        async move { self.erase_block(cs_index, address) }
+    }
+
+    fn write_data(
+        &mut self,
+        cs_index: u32,
+        address: Address,
+        write_data_ref: &[u8],
+        write_bytes: u32,
+    ) -> Result<StatusOutput, Error> {
+        todo!()
+    }
+
+    fn write_data_async(
+        &mut self,
+        cs_index: u32,
+        address: Address,
+        write_data_ref: &[u8],
+        write_bytes: u32,
+    ) -> impl Future<Output = Result<StatusOutput, Error>> {
+        async move { self.write_data(cs_index, address, write_data_ref, write_bytes) }
     }
 }
