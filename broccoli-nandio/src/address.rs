@@ -54,10 +54,16 @@ pub const MIN_BYTES_PER_IC: usize = MIN_BLOCKS_PER_IC * BYTES_PER_BLOCK;
 
 bitfield! {
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+    /// Chip Column Address.
     pub struct Address(u32);
+    /// column address: 12bit 0 ~ 2176
     pub column, set_column: 11,0;
-    pub reserved, _: 15,12;
+    /// chip_id: 4bit 0 ~ 15 (実際には0,1しか使わない)
+    /// reservedを曲がりしており、Addressing時はLow固定にする必要あり
+    pub chip_id, set_chip_id: 15,12;
+    /// page address: 6bit 0 ~ 63
     pub page, set_page: 21,16;
+    /// block address: 10bit 0 ~ 1023
     pub block, set_block: 31,22;
 }
 
@@ -71,7 +77,9 @@ impl Address {
         let data = self.raw();
         let mut slice = [0u8; 4];
         slice[0] = data as u8;
-        slice[1] = (data >> 8) as u8;
+        // Second Cycle IO4~IO7 = L
+        // reserved部分にchipid入れているので除外する
+        slice[1] = ((data >> 8) as u8) & 0x0F;
         slice[2] = (data >> 16) as u8;
         slice[3] = (data >> 24) as u8;
         slice
@@ -120,7 +128,7 @@ mod tests {
         //                         10bit      6bit  4bit  12bit
         let expect_packed = [
             (expect_value & 0xFF) as u8,
-            ((expect_value >> 8) & 0xFF) as u8,
+            ((expect_value >> 8) & 0x0F) as u8, // chip_id=L固定
             ((expect_value >> 16) & 0xFF) as u8,
             ((expect_value >> 24) & 0xFF) as u8,
         ];
