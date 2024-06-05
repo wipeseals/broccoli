@@ -35,6 +35,9 @@ jobs:
           - crate: broccoli-nandio-rp2040
             skip_clippy: false
             skip_test: false
+          - crate: broccoli-util
+            skip_clippy: false
+            skip_test: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
