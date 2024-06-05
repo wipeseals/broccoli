@@ -5,6 +5,7 @@ pub const U32_BIT_WIDTH: usize = 32;
 
 /// A bit array with a fixed number of bits.
 /// generic_const_exprs使えるならbitwidthからword数求めたかったが今は無理
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct BitArr<const U32DATA_N: usize> {
     pub data: [u32; U32DATA_N],
 }

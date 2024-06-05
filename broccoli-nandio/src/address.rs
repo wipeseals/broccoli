@@ -1,8 +1,8 @@
 #![allow(unused, dead_code)]
 #![cfg_attr(not(test), no_std)]
 
-extern crate bitfield;
 use bitfield::bitfield;
+use broccoli_util::bitarr::BitArr;
 
 /// Usable NAND Page Size
 pub const DATA_BYTES_PER_PAGE: usize = 2048;
@@ -18,6 +18,18 @@ pub const MIN_BLOCKS_PER_IC: usize = 1004;
 pub const MIN_IC: usize = 1;
 /// Maximum number of IC
 pub const MAX_IC: usize = 2;
+
+/// IC Bitmap Size
+pub const IC_BITMAP_U32_SIZE: usize = (MAX_IC / 32) + 1;
+/// Block Bitmap Size
+pub const BLOCK_BITMAP_U32_SIZE: usize = (MAX_BLOCKS_PER_IC / 32) + 1;
+
+/// IC Bitmap
+pub type IcBitmapArr = BitArr<IC_BITMAP_U32_SIZE>;
+/// Block Bitmap
+pub type NandBlockBitArr = BitArr<BLOCK_BITMAP_U32_SIZE>;
+/// All IC Block Bitmap
+pub type AllIcNandBlockBitArr = [NandBlockBitArr; MAX_IC];
 
 /// Total NAND Page Size (Data + Spare = 2176 bytes)
 pub const TOTAL_BYTES_PER_PAGE: usize = DATA_BYTES_PER_PAGE + SPARE_BYTES_PER_PAGE;
@@ -109,6 +121,12 @@ impl Address {
     pub fn from_page_slice(slice: &[u8; 2]) -> Self {
         let data = ((slice[0] as u32) << 16) | ((slice[1] as u32) << 24);
         Address(data)
+    }
+    /// address from block
+    pub fn from_block(block: u16) -> Self {
+        let mut addr = Address(0);
+        addr.set_block(block as u32);
+        addr
     }
 }
 
