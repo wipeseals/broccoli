@@ -2,9 +2,6 @@
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
 
-extern crate broccoli_nandio;
-extern crate broccoli_nandio_rp2040;
-
 use broccoli_nandio_rp2040::{driver::Rp2040FwDriver, init_nandio_pins};
 use bsp::entry;
 
@@ -13,7 +10,7 @@ use defmt_rtt as _;
 use embedded_hal::digital::v2::OutputPin;
 use panic_probe as _;
 
-use broccoli_nandio::driver::Driver;
+use broccoli_nandio::{commander::Commander, driver::Driver};
 use broccoli_nandio_rp2040::pins::NandIoPins;
 use rp_pico as bsp;
 
@@ -25,7 +22,7 @@ use bsp::hal::{
 };
 
 #[entry]
-fn main() -> ! {
+async fn main() -> ! {
     let mut pac = pac::Peripherals::take().unwrap();
     let core = pac::CorePeripherals::take().unwrap();
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
@@ -45,8 +42,6 @@ fn main() -> ! {
     .ok()
     .unwrap();
 
-    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
-
     // setup gpio
     let pins = bsp::Pins::new(
         pac.IO_BANK0,
@@ -54,39 +49,29 @@ fn main() -> ! {
         sio.gpio_bank0,
         &mut pac.RESETS,
     );
+    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
+
     // assign LED pin (gpio25)
     let mut led_pin = pins.led.into_push_pull_output();
+    led_pin.set_high().unwrap();
     // assign nandio pins (gpio0~gpio15)
     let mut nandio_pins = init_nandio_pins!(pins);
+
+    // init drivers
     let mut nandio_driver = Rp2040FwDriver {
         nandio_pins: &mut nandio_pins,
         delay: &mut delay,
     };
     nandio_driver.init_pins();
-
-    for cs_index in 0..2 {
-        // Reset
-        nandio_driver.reset(cs_index);
-        // ID Read
-        let (read_ok, id_read_data) = nandio_driver.read_id(cs_index);
-
-        // check ID
-        info!(
-            "ID Read {} CS={} [{:02x}, {:02x}, {:02x}, {:02x}, {:02x}]",
-            if read_ok { "OK" } else { "Fail" },
-            cs_index,
-            id_read_data[0],
-            id_read_data[1],
-            id_read_data[2],
-            id_read_data[3],
-            id_read_data[4]
-        );
+    let mut commander = Commander::new();
+    // setup & check badblock
+    commander.setup(&mut nandio_driver).await;
+    let badblock_bitarrs = commander.create_badblock_bitarr(&mut nandio_driver).await;
+    for bitarr in badblock_bitarrs {
+        for i in 0..bitarr.data_len() {
+            info!("{:?}", bitarr.get(i));
+        }
     }
 
-    loop {
-        led_pin.set_high().unwrap();
-        delay.delay_ms(1000);
-        led_pin.set_low().unwrap();
-        delay.delay_ms(1000);
-    }
+    loop {}
 }

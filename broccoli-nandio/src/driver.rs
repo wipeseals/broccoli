@@ -1,9 +1,6 @@
 #![allow(unused, dead_code)]
 #![cfg_attr(not(test), no_std)]
 
-extern crate bit_field;
-extern crate bitflags;
-
 use core::future::Future;
 
 use crate::address::Address;

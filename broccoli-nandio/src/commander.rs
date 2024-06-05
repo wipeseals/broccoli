@@ -23,6 +23,13 @@ pub struct Commander {
 }
 
 impl Commander {
+    pub fn new() -> Self {
+        Self {
+            valid_cs_bitarr: IcBitmapArr::new(),
+            num_cs: 0,
+            bad_block_bitarr: [NandBlockBitArr::new(); MAX_IC],
+        }
+    }
     /// Communication Setup
     pub async fn setup(&mut self, driver: &mut impl Driver) -> usize {
         driver.init_pins();

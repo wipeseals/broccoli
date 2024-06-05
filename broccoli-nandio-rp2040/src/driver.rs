@@ -5,7 +5,6 @@ use core::future::Future;
 
 use defmt::{trace, warn};
 
-extern crate broccoli_nandio;
 use broccoli_nandio::{
     address::Address,
     driver::{CommandId, Driver, Error, StatusOutput, ID_READ_CMD_BYTES, ID_READ_EXPECT_DATA},
