@@ -71,7 +71,7 @@ bitfield! {
     /// column address: 12bit 0 ~ 2176
     pub column, set_column: 11,0;
     /// chip_id: 4bit 0 ~ 15 (実際には0,1しか使わない)
-    /// reservedを曲がりしており、Addressing時はLow固定にする必要あり
+    /// reservedを間借りしており、Addressing時はLow固定にする必要あり
     pub chip_id, set_chip_id: 15,12;
     /// page address: 6bit 0 ~ 63
     pub page, set_page: 21,16;

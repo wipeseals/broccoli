@@ -4,6 +4,9 @@
 extern crate bit_field;
 extern crate bitflags;
 
+#[cfg(test)]
+use mockall::automock;
+
 use core::future::Future;
 
 use crate::address::Address;
@@ -128,6 +131,7 @@ pub enum Error {
     Timeout,
 }
 
+#[cfg_attr(test, automock)]
 pub trait Driver {
     /// Initialize all pins
     fn init_pins(&mut self);
