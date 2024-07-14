@@ -79,3 +79,28 @@ impl Commander {
         self.bad_block_bitarr = all_bitmap.clone();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::driver::{MockDriver, ID_READ_EXPECT_DATA};
+
+    #[tokio::test]
+    async fn test_setup() {
+        let mut commander = Commander {
+            valid_cs_bitarr: IcBitmapArr::new(),
+            num_cs: 2,
+            bad_block_bitarr: [NandBlockBitArr::new(); MAX_IC],
+        };
+        let mut driver = MockDriver::new();
+        driver.expect_init_pins().times(1).returning(|| {});
+        driver.expect_reset().times(2).returning(|_| {});
+        driver
+            .expect_read_id_async()
+            .times(2)
+            .returning(|_| (true, ID_READ_EXPECT_DATA));
+
+        let num_cs = commander.setup(&mut driver).await;
+        assert_eq!(num_cs, 2);
+    }
+}
