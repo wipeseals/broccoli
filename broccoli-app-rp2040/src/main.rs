@@ -1,62 +1,77 @@
-#![no_std]
-#![no_main]
+#![allow(unused, dead_code)]
+#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_main)]
+
+use broccoli_nandio_rp2040::{driver::Rp2040FwDriver, init_nandio_pins};
+use bsp::entry;
 
 use defmt::*;
-use embassy_executor::Executor;
-use embassy_rp::gpio::{Level, Output};
-use embassy_rp::multicore::{spawn_core1, Stack};
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::channel::Channel;
-use embassy_time::Timer;
-use static_cell::StaticCell;
-use {defmt_rtt as _, panic_probe as _};
+use defmt_rtt as _;
+use embedded_hal::digital::v2::OutputPin;
+use panic_probe as _;
 
-static mut CORE1_STACK: Stack<4096> = Stack::new();
-static EXECUTOR0: StaticCell<Executor> = StaticCell::new();
-static EXECUTOR1: StaticCell<Executor> = StaticCell::new();
-static CHANNEL: Channel<CriticalSectionRawMutex, LedState, 1> = Channel::new();
+use broccoli_nandio::{commander::Commander, driver::Driver};
+use broccoli_nandio_rp2040::pins::NandIoPins;
+use rp_pico as bsp;
 
-enum LedState {
-    On,
-    Off,
-}
+use bsp::hal::{
+    clocks::{init_clocks_and_plls, Clock},
+    pac,
+    sio::Sio,
+    watchdog::Watchdog,
+};
 
-#[cortex_m_rt::entry]
-fn main() -> ! {
-    let p = embassy_rp::init(Default::default());
-    let led = Output::new(p.PIN_25, Level::Low);
+#[entry]
+async fn main() -> ! {
+    let mut pac = pac::Peripherals::take().unwrap();
+    let core = pac::CorePeripherals::take().unwrap();
+    let mut watchdog = Watchdog::new(pac.WATCHDOG);
+    let sio = Sio::new(pac.SIO);
 
-    spawn_core1(
-        p.CORE1,
-        unsafe { &mut *core::ptr::addr_of_mut!(CORE1_STACK) },
-        move || {
-            let executor1 = EXECUTOR1.init(Executor::new());
-            executor1.run(|spawner| unwrap!(spawner.spawn(core1_task(led))));
-        },
+    // External high-speed crystal on the pico board is 12Mhz
+    let external_xtal_freq_hz = 12_000_000u32;
+    let clocks = init_clocks_and_plls(
+        external_xtal_freq_hz,
+        pac.XOSC,
+        pac.CLOCKS,
+        pac.PLL_SYS,
+        pac.PLL_USB,
+        &mut pac.RESETS,
+        &mut watchdog,
+    )
+    .ok()
+    .unwrap();
+
+    // setup gpio
+    let pins = bsp::Pins::new(
+        pac.IO_BANK0,
+        pac.PADS_BANK0,
+        sio.gpio_bank0,
+        &mut pac.RESETS,
     );
+    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
 
-    let executor0 = EXECUTOR0.init(Executor::new());
-    executor0.run(|spawner| unwrap!(spawner.spawn(core0_task())));
-}
+    // assign LED pin (gpio25)
+    let mut led_pin = pins.led.into_push_pull_output();
+    led_pin.set_high().unwrap();
+    // assign nandio pins (gpio0~gpio15)
+    let mut nandio_pins = init_nandio_pins!(pins);
 
-#[embassy_executor::task]
-async fn core0_task() {
-    info!("Hello from core 0");
-    loop {
-        CHANNEL.send(LedState::On).await;
-        Timer::after_millis(100).await;
-        CHANNEL.send(LedState::Off).await;
-        Timer::after_millis(400).await;
-    }
-}
-
-#[embassy_executor::task]
-async fn core1_task(mut led: Output<'static>) {
-    info!("Hello from core 1");
-    loop {
-        match CHANNEL.receive().await {
-            LedState::On => led.set_high(),
-            LedState::Off => led.set_low(),
+    // init drivers
+    let mut nandio_driver = Rp2040FwDriver {
+        nandio_pins: &mut nandio_pins,
+        delay: &mut delay,
+    };
+    nandio_driver.init_pins();
+    let mut commander = Commander::new();
+    // setup & check badblock
+    commander.setup(&mut nandio_driver).await;
+    let badblock_bitarrs = commander.create_badblock_bitarr(&mut nandio_driver).await;
+    for bitarr in badblock_bitarrs {
+        for i in 0..bitarr.data_len() {
+            info!("{:?}", bitarr.get(i));
         }
     }
+
+    loop {}
 }

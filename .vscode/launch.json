@@ -6,7 +6,7 @@
             "preLaunchTask": "build release",
             "type": "probe-rs-debug",
             "request": "launch",
-            "name": "run rp2040",
+            "name": "run rp2040 --release",
             "cwd": "${workspaceFolder}",
             "chip": "rp2040",
             // RP2040 doesn't support connectUnderReset
