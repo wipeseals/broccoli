@@ -2,17 +2,23 @@
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
 
-use broccoli_nandio_rp2040::{driver::Rp2040FwDriver, init_nandio_pins};
-use bsp::entry;
+use core::borrow::BorrowMut;
+use core::future::Future;
+use core::ops::DerefMut;
+use core::pin::Pin;
+use core::task::{Context, Poll};
+use core::task::{RawWaker, RawWakerVTable, Waker};
 
+use cortex_m::delay::Delay;
+use heapless::Vec;
+
+use bsp::entry;
 use defmt::*;
 use defmt_rtt as _;
-use embedded_hal::digital::v2::OutputPin;
 use panic_probe as _;
-
-use broccoli_nandio::{commander::Commander, driver::Driver};
-use broccoli_nandio_rp2040::pins::NandIoPins;
 use rp_pico as bsp;
+
+use embedded_hal::digital::v2::OutputPin;
 
 use bsp::hal::{
     clocks::{init_clocks_and_plls, Clock},
@@ -21,8 +27,69 @@ use bsp::hal::{
     watchdog::Watchdog,
 };
 
+struct TaskExecutor {
+    waker: Waker,
+}
+
+impl TaskExecutor {
+    /// Create a simple waker
+    unsafe fn create_waker() -> Waker {
+        const VTABLE: RawWakerVTable = RawWakerVTable::new(
+            raw_waker_clone,
+            raw_waker_wake,
+            raw_waker_wake_by_ref,
+            raw_waker_drop,
+        );
+
+        /// Clone the raw waker
+        fn raw_waker_clone(_data: *const ()) -> RawWaker {
+            RawWaker::new(core::ptr::null(), &VTABLE)
+        }
+
+        /// Wake the task associated with the raw waker
+        fn raw_waker_wake(_data: *const ()) {}
+
+        /// Wake the task associated with the raw waker by reference
+        fn raw_waker_wake_by_ref(_data: *const ()) {}
+
+        /// Drop the raw waker
+        fn raw_waker_drop(_data: *const ()) {}
+
+        let raw_waker = RawWaker::new(core::ptr::null(), &VTABLE);
+
+        unsafe { Waker::from_raw(raw_waker) }
+    }
+
+    /// Create TaskExecutor
+    fn new() -> Self {
+        let waker = unsafe { Self::create_waker() };
+        Self { waker }
+    }
+
+    /// Run the tasks
+    fn run(&mut self, task: impl Future<Output = ()>) {
+        let mut pinned_task = core::pin::pin!(task);
+        let mut ctx = &mut Context::from_waker(&self.waker);
+        loop {
+            match pinned_task.as_mut().poll(&mut ctx) {
+                Poll::Ready(_) => break,
+                _ => continue,
+            };
+        }
+    }
+}
+
+async fn async_task1(delay: &mut Delay) -> () {
+    info!("task1");
+    delay.delay_ms(1000);
+}
+async fn async_task2(delay: &mut Delay) -> () {
+    info!("task2");
+    delay.delay_ms(1000);
+}
+
 #[entry]
-async fn main() -> ! {
+fn main() -> ! {
     let mut pac = pac::Peripherals::take().unwrap();
     let core = pac::CorePeripherals::take().unwrap();
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
@@ -41,6 +108,7 @@ async fn main() -> ! {
     )
     .ok()
     .unwrap();
+    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
 
     // setup gpio
     let pins = bsp::Pins::new(
@@ -49,29 +117,17 @@ async fn main() -> ! {
         sio.gpio_bank0,
         &mut pac.RESETS,
     );
-    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
-
     // assign LED pin (gpio25)
     let mut led_pin = pins.led.into_push_pull_output();
-    led_pin.set_high().unwrap();
-    // assign nandio pins (gpio0~gpio15)
-    let mut nandio_pins = init_nandio_pins!(pins);
 
-    // init drivers
-    let mut nandio_driver = Rp2040FwDriver {
-        nandio_pins: &mut nandio_pins,
-        delay: &mut delay,
-    };
-    nandio_driver.init_pins();
-    let mut commander = Commander::new();
-    // setup & check badblock
-    commander.setup(&mut nandio_driver).await;
-    let badblock_bitarrs = commander.create_badblock_bitarr(&mut nandio_driver).await;
-    for bitarr in badblock_bitarrs {
-        for i in 0..bitarr.data_len() {
-            info!("{:?}", bitarr.get(i));
+    let mut executor = TaskExecutor::new();
+    executor.run(async move {
+        loop {
+            async_task1(&mut delay).await;
+            led_pin.set_high().unwrap();
+            async_task2(&mut delay).await;
+            led_pin.set_low().unwrap();
         }
-    }
-
+    });
     loop {}
 }
