@@ -32,6 +32,7 @@ bitfield = "0.15.0"
 broccoli-nandio = { path = "../broccoli-nandio" }
 broccoli-nandio-rp2040 = { path = "../broccoli-nandio-rp2040" }
 broccoli-util = { path = "../broccoli-util" }
+heapless = "0.8.0"
 
 # cargo build/run
 [profile.dev]
