@@ -1,6 +1,12 @@
 {
     "rust-analyzer.cargo.target": "thumbv6m-none-eabi",
-    "rust-analyzer.checkOnSave.allTargets": false,
+    "rust-analyzer.rustfmt.extraArgs": ["+nightly"],
+    "rust-analyzer.cargo.extraEnv": {
+        "RUSTUP_TOOLCHAIN": "nightly"
+    },
+    "rust-analyzer.linkedProjects": [
+        "${workspaceFolder}/broccoli-app-rp2040/Cargo.toml",
+    ],
     "editor.formatOnSave": true,
     "rust-analyzer.check.allTargets": false,
     "cmake.configureOnOpen": false,
