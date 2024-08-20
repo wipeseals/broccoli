@@ -23,7 +23,6 @@ bind_interrupts!(struct Irqs {
 });
 
 static mut CORE1_STACK: Stack<4096> = Stack::new();
-static EXECUTOR0: StaticCell<Executor> = StaticCell::new();
 static EXECUTOR1: StaticCell<Executor> = StaticCell::new();
 
 enum LedState {
@@ -32,11 +31,32 @@ enum LedState {
 }
 static CHANNEL: Channel<CriticalSectionRawMutex, LedState, 1> = Channel::new();
 
+#[embassy_executor::task]
+async fn core1_task(mut led: Output<'static>) {
+    info!("Hello from core 1");
+    loop {
+        match CHANNEL.receive().await {
+            LedState::On => led.set_high(),
+            LedState::Off => led.set_low(),
+        }
+    }
+}
+
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     info!("Hello there!");
 
     let p = embassy_rp::init(Default::default());
+    let led = Output::new(p.PIN_25, Level::Low);
+
+    spawn_core1(
+        p.CORE1,
+        unsafe { &mut *core::ptr::addr_of_mut!(CORE1_STACK) },
+        move || {
+            let executor1 = EXECUTOR1.init(Executor::new());
+            executor1.run(|spawner| unwrap!(spawner.spawn(core1_task(led))));
+        },
+    );
 
     // Create the driver, from the HAL.
     let driver = Driver::new(p.USB, Irqs);
@@ -125,6 +145,14 @@ async fn echo<'d, T: Instance + 'd>(
     loop {
         let n = class.read_packet(&mut buf).await?;
         let data = &buf[..n];
+
+        CHANNEL
+            .send(if data[0] % 2 == 0 {
+                LedState::On
+            } else {
+                LedState::Off
+            })
+            .await;
         info!("data: {:x}", data);
         class.write_packet(data).await?;
     }
