@@ -3,20 +3,23 @@
 
 use defmt::*;
 use embassy_executor::{Executor, Spawner};
+use embassy_futures::join::join;
 use embassy_rp::bind_interrupts;
 use embassy_rp::gpio::{Level, Output};
 use embassy_rp::interrupt;
 use embassy_rp::multicore::{spawn_core1, Stack};
 use embassy_rp::peripherals::USB;
-use embassy_rp::usb::{Driver, Instance, InterruptHandler};
+use embassy_rp::usb::{Driver, InterruptHandler};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
 use embassy_time::Timer;
-use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
-use embassy_usb::driver::EndpointError;
-use embassy_usb::UsbDevice;
+use embassy_usb::driver::{Endpoint, EndpointIn, EndpointOut};
+use embassy_usb::msos::{self, windows_version};
+use embassy_usb::{Builder, Config};
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
+
+const DEVICE_INTERFACE_GUIDS: &[&str] = &["{AFB9A6FB-30BA-44BC-9232-806CFC875321}"];
 
 bind_interrupts!(struct Irqs {
     USBCTRL_IRQ => InterruptHandler<USB>;
@@ -28,6 +31,7 @@ static EXECUTOR1: StaticCell<Executor> = StaticCell::new();
 enum LedState {
     On,
     Off,
+    Toggle,
 }
 static CHANNEL: Channel<CriticalSectionRawMutex, LedState, 1> = Channel::new();
 
@@ -38,6 +42,7 @@ async fn core1_task(mut led: Output<'static>) {
         match CHANNEL.receive().await {
             LedState::On => led.set_high(),
             LedState::Off => led.set_low(),
+            LedState::Toggle => led.toggle(),
         }
     }
 }
@@ -47,7 +52,7 @@ async fn main(spawner: Spawner) {
     info!("Hello there!");
 
     let p = embassy_rp::init(Default::default());
-    let led = Output::new(p.PIN_25, Level::Low);
+    let led = Output::new(p.PIN_25, Level::High);
 
     spawn_core1(
         p.CORE1,
@@ -62,98 +67,86 @@ async fn main(spawner: Spawner) {
     let driver = Driver::new(p.USB, Irqs);
 
     // Create embassy-usb Config
-    let config = {
-        let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
-        config.manufacturer = Some("Embassy");
-        config.product = Some("USB-serial example");
-        config.serial_number = Some("12345678");
-        config.max_power = 100;
-        config.max_packet_size_0 = 64;
+    let mut config = Config::new(0xc0de, 0xcafe);
+    config.manufacturer = Some("Embassy");
+    config.product = Some("USB raw example");
+    config.serial_number = Some("12345678");
+    config.max_power = 100;
+    config.max_packet_size_0 = 64;
 
-        // Required for windows compatibility.
-        // https://developer.nordicsemi.com/nRF_Connect_SDK/doc/1.9.1/kconfig/CONFIG_CDC_ACM_IAD.html#help
-        config.device_class = 0xEF;
-        config.device_sub_class = 0x02;
-        config.device_protocol = 0x01;
-        config.composite_with_iads = true;
-        config
-    };
+    // // Required for windows compatibility.
+    // // https://developer.nordicsemi.com/nRF_Connect_SDK/doc/1.9.1/kconfig/CONFIG_CDC_ACM_IAD.html#help
+    config.device_class = 0xEF;
+    config.device_sub_class = 0x02;
+    config.device_protocol = 0x01;
+    config.composite_with_iads = true;
 
     // Create embassy-usb DeviceBuilder using the driver and config.
     // It needs some buffers for building the descriptors.
-    let mut builder = {
-        static CONFIG_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
-        static BOS_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
-        static CONTROL_BUF: StaticCell<[u8; 64]> = StaticCell::new();
+    let mut config_descriptor = [0; 256];
+    let mut bos_descriptor = [0; 256];
+    let mut msos_descriptor = [0; 256];
+    let mut control_buf = [0; 64];
 
-        let builder = embassy_usb::Builder::new(
-            driver,
-            config,
-            CONFIG_DESCRIPTOR.init([0; 256]),
-            BOS_DESCRIPTOR.init([0; 256]),
-            &mut [], // no msos descriptors
-            CONTROL_BUF.init([0; 64]),
-        );
-        builder
-    };
+    let mut builder = Builder::new(
+        driver,
+        config,
+        &mut config_descriptor,
+        &mut bos_descriptor,
+        &mut msos_descriptor,
+        &mut control_buf,
+    );
 
-    // Create classes on the builder.
-    let mut class = {
-        static STATE: StaticCell<State> = StaticCell::new();
-        let state = STATE.init(State::new());
-        CdcAcmClass::new(&mut builder, state, 64)
-    };
+    // Add the Microsoft OS Descriptor (MSOS/MOD) descriptor.
+    // We tell Windows that this entire device is compatible with the "WINUSB" feature,
+    // which causes it to use the built-in WinUSB driver automatically, which in turn
+    // can be used by libusb/rusb software without needing a custom driver or INF file.
+    // In principle you might want to call msos_feature() just on a specific function,
+    // if your device also has other functions that still use standard class drivers.
+    builder.msos_descriptor(windows_version::WIN8_1, 0);
+    builder.msos_feature(msos::CompatibleIdFeatureDescriptor::new("WINUSB", ""));
+    builder.msos_feature(msos::RegistryPropertyFeatureDescriptor::new(
+        "DeviceInterfaceGUIDs",
+        msos::PropertyData::RegMultiSz(DEVICE_INTERFACE_GUIDS),
+    ));
+
+    // Add a vendor-specific function (class 0xFF), and corresponding interface,
+    // that uses our custom handler.
+    let mut function = builder.function(0xFF, 0, 0);
+    let mut interface = function.interface();
+    let mut alt = interface.alt_setting(0xFF, 0, 0, None);
+    let mut read_ep = alt.endpoint_bulk_out(64);
+    let mut write_ep = alt.endpoint_bulk_in(64);
+    drop(function);
 
     // Build the builder.
-    let usb = builder.build();
+    let mut usb = builder.build();
 
     // Run the USB device.
-    unwrap!(spawner.spawn(usb_task(usb)));
+    let usb_fut = usb.run();
 
     // Do stuff with the class!
-    loop {
-        class.wait_connection().await;
-        info!("Connected");
-        let _ = echo(&mut class).await;
-        info!("Disconnected");
-    }
-}
-
-type MyUsbDriver = Driver<'static, USB>;
-type MyUsbDevice = UsbDevice<'static, MyUsbDriver>;
-
-#[embassy_executor::task]
-async fn usb_task(mut usb: MyUsbDevice) -> ! {
-    usb.run().await
-}
-
-struct Disconnected {}
-
-impl From<EndpointError> for Disconnected {
-    fn from(val: EndpointError) -> Self {
-        match val {
-            EndpointError::BufferOverflow => crate::panic!("Buffer overflow"),
-            EndpointError::Disabled => Disconnected {},
+    let echo_fut = async {
+        loop {
+            read_ep.wait_enabled().await;
+            info!("Connected");
+            loop {
+                let mut data = [0; 64];
+                match read_ep.read(&mut data).await {
+                    Ok(n) => {
+                        CHANNEL.send(LedState::Toggle).await;
+                        info!("Got bulk: {:a}", data[..n]);
+                        // Echo back to the host:
+                        write_ep.write(&data[..n]).await.ok();
+                    }
+                    Err(_) => break,
+                }
+            }
+            info!("Disconnected");
         }
-    }
-}
+    };
 
-async fn echo<'d, T: Instance + 'd>(
-    class: &mut CdcAcmClass<'d, Driver<'d, T>>,
-) -> Result<(), Disconnected> {
-    let mut buf = [0; 64];
-    loop {
-        let n = class.read_packet(&mut buf).await?;
-        let data = &buf[..n];
-
-        CHANNEL
-            .send(if data[0] % 2 == 0 {
-                LedState::On
-            } else {
-                LedState::Off
-            })
-            .await;
-        info!("data: {:x}", data);
-        class.write_packet(data).await?;
-    }
+    // Run everything concurrently.
+    // If we had made everything `'static` above instead, we could do this using separate tasks instead.
+    join(usb_fut, echo_fut).await;
 }
