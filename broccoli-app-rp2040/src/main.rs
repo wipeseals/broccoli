@@ -23,8 +23,9 @@ bind_interrupts!(struct Irqs {
     USBCTRL_IRQ => InterruptHandler<USB>;
 });
 
-static mut CORE1_STACK: Stack<4096> = Stack::new();
-static EXECUTOR1: StaticCell<Executor> = StaticCell::new();
+///////////////////////////////////////////////////////////////////////////////
+/// shared resources
+///////////////////////////////////////////////////////////////////////////////
 
 enum LedState {
     On,
@@ -33,8 +34,12 @@ enum LedState {
 }
 static CHANNEL: Channel<CriticalSectionRawMutex, LedState, 1> = Channel::new();
 
+///////////////////////////////////////////////////////////////////////////////
+/// core1 task
+///////////////////////////////////////////////////////////////////////////////
+
 #[embassy_executor::task]
-async fn core1_task(mut led: Output<'static>) {
+async fn core1_led_task(mut led: Output<'static>) {
     info!("Hello from core 1");
     loop {
         match CHANNEL.receive().await {
@@ -45,25 +50,12 @@ async fn core1_task(mut led: Output<'static>) {
     }
 }
 
-#[embassy_executor::main]
-async fn main(spawner: Spawner) {
-    info!("Hello there!");
+///////////////////////////////////////////////////////////////////////////////
+/// core0 task
+///////////////////////////////////////////////////////////////////////////////
 
-    let p = embassy_rp::init(Default::default());
-    let led = Output::new(p.PIN_25, Level::High);
-
-    spawn_core1(
-        p.CORE1,
-        unsafe { &mut *core::ptr::addr_of_mut!(CORE1_STACK) },
-        move || {
-            let executor1 = EXECUTOR1.init(Executor::new());
-            executor1.run(|spawner| unwrap!(spawner.spawn(core1_task(led))));
-        },
-    );
-
-    // Create the driver, from the HAL.
-    let driver = Driver::new(p.USB, Irqs);
-
+#[embassy_executor::task]
+async fn core0_usb_task(mut driver: Driver<'static, USB>) {
     // Create embassy-usb Config
     let mut config = Config::new(0xc0de, 0xcafe);
     config.manufacturer = Some("wipeseals");
@@ -105,6 +97,7 @@ async fn main(spawner: Spawner) {
             read_ep.wait_enabled().await;
             info!("Connected");
             loop {
+                CHANNEL.send(LedState::Toggle).await;
                 let mut data = [0; 64];
                 match read_ep.read(&mut data).await {
                     Ok(n) => {
@@ -113,7 +106,7 @@ async fn main(spawner: Spawner) {
 
                         let signature = LittleEndian::read_u32(&data[..4]);
                         match signature {
-                            x if x == ScsiSignature::CommandBlockWrapper as u32 => {
+                            x if x == BulkTransportSignature::CommandBlockWrapper as u32 => {
                                 let packet_data = CommandBlockWrapperPacket {
                                     signature,
                                     tag: LittleEndian::read_u32(&data[4..8]),
@@ -125,10 +118,10 @@ async fn main(spawner: Spawner) {
                                 };
                                 info!("Got CBW: {:#x}", packet_data);
                             }
-                            x if x == ScsiSignature::CommandStatusWrapper as u32 => {
+                            x if x == BulkTransportSignature::CommandStatusWrapper as u32 => {
                                 info!("Got CSW");
                             }
-                            x if x == ScsiSignature::DataBlockWrapper as u32 => {
+                            x if x == BulkTransportSignature::DataBlockWrapper as u32 => {
                                 info!("Got DBW");
                             }
                             _ => {
@@ -150,9 +143,39 @@ async fn main(spawner: Spawner) {
     join(usb_fut, usb_scsi_bbb_fut).await;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+/// main entry point for the application.
+/// core0 will run this function.
+///////////////////////////////////////////////////////////////////////////////
+
+static mut CORE1_STACK: Stack<4096> = Stack::new();
+static EXECUTOR0: StaticCell<Executor> = StaticCell::new();
+static EXECUTOR1: StaticCell<Executor> = StaticCell::new();
+
+#[embassy_executor::main]
+async fn main(spawner: Spawner) {
+    info!("Hello there!");
+
+    let p = embassy_rp::init(Default::default());
+    let led = Output::new(p.PIN_25, Level::High);
+
+    spawn_core1(
+        p.CORE1,
+        unsafe { &mut *core::ptr::addr_of_mut!(CORE1_STACK) },
+        move || {
+            let executor1 = EXECUTOR1.init(Executor::new());
+            executor1.run(|spawner| unwrap!(spawner.spawn(core1_led_task(led))));
+        },
+    );
+
+    let driver = Driver::new(p.USB, Irqs);
+    let executor0 = EXECUTOR0.init(Executor::new());
+    executor0.run(|spawner| unwrap!(spawner.spawn(core0_usb_task(driver))));
+}
+
 /// SCSI command block wrapper
 #[repr(u32)]
-enum ScsiSignature {
+enum BulkTransportSignature {
     CommandBlockWrapper = 0x43425355,
     CommandStatusWrapper = 0x53425355,
     DataBlockWrapper = 0x44425355,
