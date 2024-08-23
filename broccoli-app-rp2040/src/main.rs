@@ -1,6 +1,7 @@
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
 
+use byteorder::{ByteOrder, LittleEndian};
 use defmt::*;
 use embassy_executor::{Executor, Spawner};
 use embassy_futures::join::join;
@@ -14,12 +15,9 @@ use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
 use embassy_time::Timer;
 use embassy_usb::driver::{Endpoint, EndpointIn, EndpointOut};
-use embassy_usb::msos::{self, windows_version};
 use embassy_usb::{Builder, Config};
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
-
-const DEVICE_INTERFACE_GUIDS: &[&str] = &["{AFB9A6FB-30BA-44BC-9232-806CFC875321}"];
 
 bind_interrupts!(struct Irqs {
     USBCTRL_IRQ => InterruptHandler<USB>;
@@ -68,18 +66,11 @@ async fn main(spawner: Spawner) {
 
     // Create embassy-usb Config
     let mut config = Config::new(0xc0de, 0xcafe);
-    config.manufacturer = Some("Embassy");
-    config.product = Some("USB raw example");
-    config.serial_number = Some("12345678");
+    config.manufacturer = Some("wipeseals");
+    config.product = Some("broccoli");
+    config.serial_number = Some("snbroccoli");
     config.max_power = 100;
     config.max_packet_size_0 = 64;
-
-    // // Required for windows compatibility.
-    // // https://developer.nordicsemi.com/nRF_Connect_SDK/doc/1.9.1/kconfig/CONFIG_CDC_ACM_IAD.html#help
-    config.device_class = 0xEF;
-    config.device_sub_class = 0x02;
-    config.device_protocol = 0x01;
-    config.composite_with_iads = true;
 
     // Create embassy-usb DeviceBuilder using the driver and config.
     // It needs some buffers for building the descriptors.
@@ -97,36 +88,19 @@ async fn main(spawner: Spawner) {
         &mut control_buf,
     );
 
-    // Add the Microsoft OS Descriptor (MSOS/MOD) descriptor.
-    // We tell Windows that this entire device is compatible with the "WINUSB" feature,
-    // which causes it to use the built-in WinUSB driver automatically, which in turn
-    // can be used by libusb/rusb software without needing a custom driver or INF file.
-    // In principle you might want to call msos_feature() just on a specific function,
-    // if your device also has other functions that still use standard class drivers.
-    builder.msos_descriptor(windows_version::WIN8_1, 0);
-    builder.msos_feature(msos::CompatibleIdFeatureDescriptor::new("WINUSB", ""));
-    builder.msos_feature(msos::RegistryPropertyFeatureDescriptor::new(
-        "DeviceInterfaceGUIDs",
-        msos::PropertyData::RegMultiSz(DEVICE_INTERFACE_GUIDS),
-    ));
-
-    // Add a vendor-specific function (class 0xFF), and corresponding interface,
-    // that uses our custom handler.
-    let mut function = builder.function(0xFF, 0, 0);
+    // interfaceClass: 0x08 (Mass Storage)
+    // interfaceSubClass: 0x06 (SCSI Primary Commands)
+    // interfaceProtocol: 0x50 (Bulk Only Transport)
+    let mut function = builder.function(0x08, 0x06, 0x50);
     let mut interface = function.interface();
-    let mut alt = interface.alt_setting(0xFF, 0, 0, None);
+    let mut alt = interface.alt_setting(0x08, 0x06, 0x50, None);
     let mut read_ep = alt.endpoint_bulk_out(64);
     let mut write_ep = alt.endpoint_bulk_in(64);
     drop(function);
 
-    // Build the builder.
     let mut usb = builder.build();
-
-    // Run the USB device.
     let usb_fut = usb.run();
-
-    // Do stuff with the class!
-    let echo_fut = async {
+    let usb_scsi_bbb_fut = async {
         loop {
             read_ep.wait_enabled().await;
             info!("Connected");
@@ -135,7 +109,32 @@ async fn main(spawner: Spawner) {
                 match read_ep.read(&mut data).await {
                     Ok(n) => {
                         CHANNEL.send(LedState::Toggle).await;
-                        info!("Got bulk: {:a}", data[..n]);
+                        info!("Got bulk: {:x}", data[..n]);
+
+                        let signature = LittleEndian::read_u32(&data[..4]);
+                        match signature {
+                            x if x == ScsiSignature::CommandBlockWrapper as u32 => {
+                                let packet_data = CommandBlockWrapperPacket {
+                                    signature,
+                                    tag: LittleEndian::read_u32(&data[4..8]),
+                                    data_transfer_length: LittleEndian::read_u32(&data[8..12]),
+                                    flags: data[12],
+                                    lun: data[13],
+                                    command_length: data[14],
+                                    command: data[15..31].try_into().unwrap(),
+                                };
+                                info!("Got CBW: {:#x}", packet_data);
+                            }
+                            x if x == ScsiSignature::CommandStatusWrapper as u32 => {
+                                info!("Got CSW");
+                            }
+                            x if x == ScsiSignature::DataBlockWrapper as u32 => {
+                                info!("Got DBW");
+                            }
+                            _ => {
+                                info!("Unknown signature");
+                            }
+                        }
                         // Echo back to the host:
                         write_ep.write(&data[..n]).await.ok();
                     }
@@ -148,5 +147,25 @@ async fn main(spawner: Spawner) {
 
     // Run everything concurrently.
     // If we had made everything `'static` above instead, we could do this using separate tasks instead.
-    join(usb_fut, echo_fut).await;
+    join(usb_fut, usb_scsi_bbb_fut).await;
+}
+
+/// SCSI command block wrapper
+#[repr(u32)]
+enum ScsiSignature {
+    CommandBlockWrapper = 0x43425355,
+    CommandStatusWrapper = 0x53425355,
+    DataBlockWrapper = 0x44425355,
+}
+
+/// SCSI command block wrapper packet
+#[derive(Debug, Copy, Clone, defmt::Format)]
+struct CommandBlockWrapperPacket {
+    signature: u32,
+    tag: u32,
+    data_transfer_length: u32,
+    flags: u8,
+    lun: u8,
+    command_length: u8,
+    command: [u8; 16],
 }
