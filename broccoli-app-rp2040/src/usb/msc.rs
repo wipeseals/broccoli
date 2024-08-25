@@ -24,10 +24,10 @@ use static_cell::StaticCell;
 use crate::channel::{LedState, LEDCONTROLCHANNEL};
 
 // interfaceClass: 0x08 (Mass Storage)
-// interfaceSubClass: 0x06 (SCSI Primary Commands)
-// interfaceProtocol: 0x50 (Bulk Only Transport)
 const MSC_INTERFACE_CLASS: u8 = 0x08;
+// interfaceSubClass: 0x06 (SCSI Primary Commands)
 const MSC_INTERFACE_SUBCLASS: u8 = 0x06;
+// interfaceProtocol: 0x50 (Bulk Only Transport)
 const MSC_INTERFACE_PROTOCOL: u8 = 0x50;
 
 #[repr(u8)]
