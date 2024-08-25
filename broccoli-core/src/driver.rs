@@ -10,6 +10,8 @@ use bitflags::bitflags;
 use async_mock::async_mock;
 use async_trait::async_trait;
 
+use trait_variant;
+
 /// ID read bytes
 pub const ID_READ_CMD_BYTES: usize = 5;
 
@@ -94,6 +96,7 @@ pub enum Error {
 
 #[cfg_attr(test, async_mock)]
 #[cfg_attr(test, async_trait)]
+#[trait_variant::make(Send + Sync)]
 pub trait Driver {
     /// Initialize all pins
     fn init_pins<'a>(&'a mut self);
