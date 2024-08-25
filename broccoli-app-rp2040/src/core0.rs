@@ -15,7 +15,7 @@ use embassy_usb::control::{InResponse, OutResponse, Recipient, Request, RequestT
 use embassy_usb::driver::{Endpoint, EndpointIn, EndpointOut};
 use embassy_usb::msos::{self, windows_version};
 use embassy_usb::types::InterfaceNumber;
-use embassy_usb::{Builder, Config};
+use embassy_usb::{Builder, Config, Handler};
 use export::debug;
 use static_cell::StaticCell;
 
@@ -199,6 +199,61 @@ impl CommandStatusWrapperPacket {
     }
 }
 
+/// Handle CONTROL endpoint requests and responses. For many simple requests and responses
+/// you can get away with only using the control endpoint.
+struct ControlHandler {
+    if_num: InterfaceNumber,
+}
+
+impl Handler for ControlHandler {
+    /// Respond to HostToDevice control messages, where the host sends us a command and
+    /// optionally some data, and we can only acknowledge or reject it.
+    fn control_out<'a>(&'a mut self, req: Request, buf: &'a [u8]) -> Option<OutResponse> {
+        // Log the request before filtering to help with debugging.
+        info!("Got control_out, request={}, buf={:a}", req, buf);
+
+        // Only handle Vendor request types to an Interface.
+        if req.request_type != RequestType::Vendor || req.recipient != Recipient::Interface {
+            return None;
+        }
+
+        // Ignore requests to other interfaces.
+        if req.index != self.if_num.0 as u16 {
+            return None;
+        }
+
+        // Accept request 100, value 200, reject others.
+        if req.request == 100 && req.value == 200 {
+            Some(OutResponse::Accepted)
+        } else {
+            Some(OutResponse::Rejected)
+        }
+    }
+
+    /// Respond to DeviceToHost control messages, where the host requests some data from us.
+    fn control_in<'a>(&'a mut self, req: Request, buf: &'a mut [u8]) -> Option<InResponse<'a>> {
+        info!("Got control_in, request={}", req);
+
+        // Only handle Vendor request types to an Interface.
+        if req.request_type != RequestType::Vendor || req.recipient != Recipient::Interface {
+            return None;
+        }
+
+        // Ignore requests to other interfaces.
+        if req.index != self.if_num.0 as u16 {
+            return None;
+        }
+
+        // Respond "hello" to request 101, value 201, when asked for 5 bytes, otherwise reject.
+        if req.request == 101 && req.value == 201 && req.length == 5 {
+            buf[..5].copy_from_slice(b"hello");
+            Some(InResponse::Accepted(&buf[..5]))
+        } else {
+            Some(InResponse::Rejected)
+        }
+    }
+}
+
 async fn usb_transport_task(driver: Driver<'static, USB>) {
     // Create embassy-usb Config
     let mut config = Config::new(0xc0de, 0xcafe);
@@ -212,6 +267,11 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
     let mut bos_descriptor = [0; 256];
     let mut msos_descriptor = [0; 256];
     let mut control_buf = [0; 64];
+
+    let mut handler = ControlHandler {
+        if_num: InterfaceNumber(0),
+    };
+
     let mut builder = Builder::new(
         driver,
         config,
@@ -243,8 +303,9 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
     // TODO: Control Transport for support of Mass Storage Reset and Get Max LUN
     // class command: 0x00 (Mass Storage Reset)
     // class command: 0xfe (Get Max LUN)
-
+    handler.if_num = interface.interface_number();
     drop(function);
+    builder.handler(&mut handler);
 
     let mut usb = builder.build();
     let usb_fut = usb.run();
