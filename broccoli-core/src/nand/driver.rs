@@ -2,7 +2,7 @@
 
 use core::future::Future;
 
-use crate::address::Address;
+use crate::nand::address::Address;
 use bit_field::BitField;
 use bitflags::bitflags;
 
@@ -96,7 +96,7 @@ pub enum Error {
 
 #[cfg_attr(test, async_mock)]
 #[cfg_attr(test, async_trait)]
-#[trait_variant::make(Send + Sync)]
+#[trait_variant::make(Send)]
 pub trait Driver {
     /// Initialize all pins
     fn init_pins<'a>(&'a mut self);

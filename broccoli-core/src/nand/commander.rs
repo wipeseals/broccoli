@@ -1,7 +1,7 @@
 #![cfg_attr(not(test), no_std)]
 
-use crate::address::*;
-use crate::driver::*;
+use crate::nand::address::*;
+use crate::nand::driver::*;
 use core::future::Future;
 
 #[cfg(test)]

@@ -5,12 +5,12 @@ use core::future::Future;
 
 use defmt::{trace, warn};
 
-use broccoli_nandio::{
-    address::Address,
-    driver::{CommandId, Driver, Error, StatusOutput, ID_READ_CMD_BYTES, ID_READ_EXPECT_DATA},
+use broccoli_core::{
+    nand::address::Address,
+    nand::driver::{CommandId, Driver, Error, StatusOutput, ID_READ_CMD_BYTES, ID_READ_EXPECT_DATA},
 };
 
-use crate::pins::NandIoPins;
+use crate::nand::pins::NandIoPins;
 
 /// Delay for command latch
 /// t_XXX worst (w/o t_RST) = 100ns
@@ -287,19 +287,19 @@ impl Driver for Rp2040FwDriver<'_> {
     }
 
     async fn init_pins_async<'a>(&'a mut self) -> () {
-        async { self.init_pins() }
+        async { self.init_pins() }.await
     }
 
     async fn reset_async<'a>(&'a mut self, cs_index: usize) -> () {
-        async move { self.reset(cs_index) }
+        async move { self.reset(cs_index) }.await
     }
 
     async fn read_status_async<'a>(&'a mut self, cs_index: usize) -> StatusOutput {
-        async move { self.read_status(cs_index) }
+        async move { self.read_status(cs_index) }.await
     }
 
     async fn set_write_protect_async<'a>(&'a mut self, enable: bool) -> () {
-        async move { self.set_write_protect(enable) }
+        async move { self.set_write_protect(enable); }.await
     }
 
     async fn erase_block_async<'a> (
@@ -307,7 +307,7 @@ impl Driver for Rp2040FwDriver<'_> {
         cs_index: usize,
         address: Address,
     ) -> Result<StatusOutput, Error> {
-        async move { self.erase_block(cs_index, address) }
+        async move { self.erase_block(cs_index, address) }.await
     }
 
     async fn write_data_async(
@@ -316,7 +316,7 @@ impl Driver for Rp2040FwDriver<'_> {
         address: Address,
         write_data_ref: &[u8],
         write_bytes: usize,
-    ) Result<StatusOutput, Error> {
-        async move { self.write_data(cs_index, address, write_data_ref, write_bytes) }
+    ) -> Result<StatusOutput, Error> {
+        async move { self.write_data(cs_index, address, write_data_ref, write_bytes) }.await
     }
 }
