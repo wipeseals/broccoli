@@ -1,5 +1,5 @@
 [package]
-name = "broccoli-nandio-rp2040"
+name = "broccoli-driver-rp2040"
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"

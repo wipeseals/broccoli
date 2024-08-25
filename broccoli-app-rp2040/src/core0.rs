@@ -243,11 +243,6 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
     // TODO: Control Transport for support of Mass Storage Reset and Get Max LUN
     // class command: 0x00 (Mass Storage Reset)
     // class command: 0xfe (Get Max LUN)
-    // let mut handler = ControlHandler {
-    //     if_num: InterfaceNumber(0),
-    // };
-    // handler.if_num = interface.interface_number();
-    // builder.handler(&mut handler);
 
     drop(function);
 

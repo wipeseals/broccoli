@@ -1,6 +1,3 @@
-#![allow(unused, dead_code)]
-#![cfg_attr(not(test), no_std)]
-
 pub const U32_BIT_WIDTH: usize = 32;
 
 /// A bit array with a fixed number of bits.

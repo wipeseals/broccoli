@@ -1,18 +1,14 @@
-#![allow(unused, dead_code)]
 #![cfg_attr(not(test), no_std)]
-
-extern crate bit_field;
-extern crate bitflags;
-
-#[cfg(test)]
-use async_mock::async_mock;
-use async_trait::async_trait;
 
 use core::future::Future;
 
 use crate::address::Address;
 use bit_field::BitField;
 use bitflags::bitflags;
+
+#[cfg(test)]
+use async_mock::async_mock;
+use async_trait::async_trait;
 
 /// ID read bytes
 pub const ID_READ_CMD_BYTES: usize = 5;
@@ -91,7 +87,83 @@ impl StatusOutput {
     }
 }
 
-#[cfg(test)]
+pub enum Error {
+    Common,
+    Timeout,
+}
+
+#[cfg_attr(test, async_mock)]
+#[cfg_attr(test, async_trait)]
+pub trait Driver {
+    /// Initialize all pins
+    fn init_pins<'a>(&'a mut self);
+    async fn init_pins_async<'a>(&'a mut self);
+
+    /// Set write protect
+    fn set_write_protect<'a>(&'a mut self, enable: bool);
+    async fn set_write_protect_async<'a>(&'a mut self, enable: bool);
+
+    /// Reset NAND IC
+    fn reset<'a>(&'a mut self, cs_index: usize);
+    async fn reset_async<'a>(&'a mut self, cs_index: usize);
+
+    /// Read NAND IC ID
+    fn read_id<'a>(&'a mut self, cs_index: usize) -> (bool, [u8; ID_READ_CMD_BYTES]);
+    async fn read_id_async<'a>(
+        &'a mut self,
+        cs_index: usize,
+    ) -> (bool, [u8; ID_READ_CMD_BYTES]);
+
+    /// Read NAND IC data
+    fn read_data<'a>(
+        &'a mut self,
+        cs_index: usize,
+        address: Address,
+        read_data_ref: &mut [u8],
+        read_bytes: usize,
+    ) -> Result<(), Error>;
+    async fn read_data_async<'a>(
+        &'a mut self,
+        cs_index: usize,
+        address: Address,
+        read_data_ref: &mut [u8],
+        read_bytes: usize,
+    ) -> Result<(), Error>;
+
+    /// Read NAND IC status
+    fn read_status<'a>(&'a mut self, cs_index: usize) -> StatusOutput;
+    async fn read_status_async<'a>(&'a mut self, cs_index: usize) -> StatusOutput;
+
+    /// Erase NAND IC block
+    fn erase_block<'a>(
+        &'a mut self,
+        cs_index: usize,
+        address: Address,
+    ) -> Result<StatusOutput, Error>;
+    async fn erase_block_async<'a>(
+        &'a mut self,
+        cs_index: usize,
+        address: Address,
+    ) -> Result<StatusOutput, Error>;
+
+    /// Write NAND IC data
+    fn write_data<'a>(
+        &'a mut self,
+        cs_index: usize,
+        address: Address,
+        write_data_ref: &[u8],
+        write_bytes: usize,
+    ) -> Result<StatusOutput, Error>;
+    async fn write_data_async<'a>(
+        &'a mut self,
+        cs_index: usize,
+        address: Address,
+        write_data_ref: &[u8],
+        write_bytes: usize,
+    ) -> Result<StatusOutput, Error>;
+}
+
+
 mod tests {
     use super::*;
 
@@ -125,79 +197,4 @@ mod tests {
         assert!(status.is_data_cache_ready());
         assert!(!status.is_write_protect());
     }
-}
-
-pub enum Error {
-    Common,
-    Timeout,
-}
-
-#[cfg_attr(test, async_mock)]
-pub trait Driver {
-    /// Initialize all pins
-    fn init_pins<'a>(&'a mut self);
-    fn init_pins_async<'a>(&'a mut self) -> impl Future<Output = ()>;
-
-    /// Set write protect
-    fn set_write_protect<'a>(&'a mut self, enable: bool);
-    fn set_write_protect_async<'a>(&'a mut self, enable: bool) -> impl Future<Output = ()>;
-
-    /// Reset NAND IC
-    fn reset<'a>(&'a mut self, cs_index: usize);
-    fn reset_async<'a>(&'a mut self, cs_index: usize) -> impl Future<Output = ()>;
-
-    /// Read NAND IC ID
-    fn read_id<'a>(&'a mut self, cs_index: usize) -> (bool, [u8; ID_READ_CMD_BYTES]);
-    fn read_id_async<'a>(
-        &'a mut self,
-        cs_index: usize,
-    ) -> impl Future<Output = (bool, [u8; ID_READ_CMD_BYTES])>;
-
-    /// Read NAND IC data
-    fn read_data(
-        &mut self,
-        cs_index: usize,
-        address: Address,
-        read_data_ref: &mut [u8],
-        read_bytes: usize,
-    ) -> Result<(), Error>;
-    fn read_data_async(
-        &mut self,
-        cs_index: usize,
-        address: Address,
-        read_data_ref: &mut [u8],
-        read_bytes: usize,
-    ) -> impl Future<Output = Result<(), Error>>;
-
-    /// Read NAND IC status
-    fn read_status<'a>(&'a mut self, cs_index: usize) -> StatusOutput;
-    fn read_status_async<'a>(&'a mut self, cs_index: usize) -> impl Future<Output = StatusOutput>;
-
-    /// Erase NAND IC block
-    fn erase_block<'a>(
-        &'a mut self,
-        cs_index: usize,
-        address: Address,
-    ) -> Result<StatusOutput, Error>;
-    fn erase_block_async<'a>(
-        &'a mut self,
-        cs_index: usize,
-        address: Address,
-    ) -> impl Future<Output = Result<StatusOutput, Error>>;
-
-    /// Write NAND IC data
-    fn write_data<'a>(
-        &'a mut self,
-        cs_index: usize,
-        address: Address,
-        write_data_ref: &[u8],
-        write_bytes: usize,
-    ) -> Result<StatusOutput, Error>;
-    fn write_data_async<'a>(
-        &'a mut self,
-        cs_index: usize,
-        address: Address,
-        write_data_ref: &[u8],
-        write_bytes: usize,
-    ) -> impl Future<Output = Result<StatusOutput, Error>>;
 }

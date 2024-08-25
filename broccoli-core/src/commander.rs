@@ -1,17 +1,12 @@
-#![allow(unused, dead_code)]
 #![cfg_attr(not(test), no_std)]
 
-use bit_field::BitArray;
-
-use crate::{
-    address::{
-        Address, AllIcNandBlockBitArr, IcBitmapArr, NandBlockBitArr, BLOCK_BITMAP_U32_SIZE,
-        IC_BITMAP_U32_SIZE, MAX_BLOCKS_PER_IC, MAX_IC,
-    },
-    driver::Driver,
-};
-use broccoli_util::bitarr::BitArr;
+use crate::address::*;
+use crate::driver::*;
 use core::future::Future;
+
+#[cfg(test)]
+use async_mock::async_mock;
+use async_trait::async_trait;
 
 pub struct Commander {
     /// Number of NAND chip
