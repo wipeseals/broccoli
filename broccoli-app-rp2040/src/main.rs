@@ -5,6 +5,7 @@
 mod channel;
 mod core0;
 mod core1;
+mod usb;
 
 use core0::core0_main;
 use core1::core1_main;
