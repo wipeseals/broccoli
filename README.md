@@ -10,6 +10,12 @@ TODO:
 
 TODO:
 
+### Structure
+
+- `broccoli-core`: 基本機能を実装した crate
+- `broccoli-driver-rp2040`: `broccoli-core` のうち、RP2040 専用で実装されている要素
+- `broccoli-app-rp2040`: `broccoli-core`, `broccoli-driver-rp2040` を参照し実装されたアプリケーション本体
+
 ## Reference
 
 - [[VOL-28]JISC-SSD(Jisaku In-Storage Computation SSD 学習ボード)](https://crane-elec.co.jp/products/vol-28/)
