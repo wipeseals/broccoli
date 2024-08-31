@@ -7,7 +7,7 @@ use embassy_rp::gpio::{Level, Output};
 use embassy_rp::interrupt;
 use embassy_rp::multicore::{spawn_core1, Stack};
 use embassy_rp::peripherals::USB;
-use embassy_rp::usb::{Driver, Endpoint, In, InterruptHandler, Out};
+use embassy_rp::usb::{Driver, In, InterruptHandler, Out};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
 use embassy_time::Timer;
@@ -19,8 +19,7 @@ use embassy_usb::{Builder, Config, Handler};
 use export::debug;
 use static_cell::StaticCell;
 
-use crate::channel::{LedState, LEDCONTROLCHANNEL};
-use crate::usb::msc::MscHandler;
+use crate::usb::msc::{BulkTransferRequest, MscBulkHandler, MscCtrlHandler};
 
 async fn usb_transport_task(driver: Driver<'static, USB>) {
     // Create embassy-usb Config
@@ -36,7 +35,9 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
     let mut msos_descriptor = [0; 256];
     let mut control_buf = [0; 64];
 
-    let mut msc_handler = MscHandler::new();
+    let mut channel_ctrl_to_bulk: Channel<CriticalSectionRawMutex, BulkTransferRequest, 2> =
+        Channel::new();
+    let mut ctrl_handler = MscCtrlHandler::new(&channel_ctrl_to_bulk);
     let mut builder = Builder::new(
         driver,
         config,
@@ -45,13 +46,15 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
         &mut msos_descriptor,
         &mut control_buf,
     );
-    msc_handler.build(&mut builder, config);
+    let mut bulk_handler = MscBulkHandler::new(&channel_ctrl_to_bulk);
+    ctrl_handler.build(&mut builder, config, &mut bulk_handler);
+
     let mut usb = builder.build();
     let usb_fut = usb.run();
-    let msc_fut = msc_handler.run(); // TODO: おそらくControl,Bulkで構造体自体共有しない方が良い
+    let bulk_fut = bulk_handler.run();
 
     // Run everything concurrently.
-    join(usb_fut, msc_fut).await;
+    join(usb_fut, bulk_fut).await;
 }
 
 #[embassy_executor::task]

@@ -1,3 +1,5 @@
+use core::borrow::{Borrow, BorrowMut};
+
 use byteorder::{ByteOrder, LittleEndian};
 use defmt::*;
 use embassy_executor::{Executor, Spawner};
@@ -9,10 +11,9 @@ use embassy_rp::multicore::{spawn_core1, Stack};
 use embassy_rp::peripherals::USB;
 use embassy_rp::usb::{In, Instance, InterruptHandler, Out};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::blocking_mutex::Mutex;
-use embassy_sync::channel::Channel;
-use embassy_time::Timer;
+use embassy_sync::channel::{Channel, DynamicReceiver, DynamicSender, Receiver, Sender};
+use embassy_time::{Timer, WithTimeout};
 use embassy_usb::control::{InResponse, OutResponse, Recipient, Request, RequestType};
 use embassy_usb::driver::{Driver, Endpoint, EndpointIn, EndpointOut};
 use embassy_usb::msos::{self, windows_version};
@@ -215,14 +216,30 @@ impl CommandStatusWrapperPacket {
     }
 }
 
-pub struct MscHandler<'d, D: Driver<'d>> {
+/// USB Bulk Transfer Request
+/// This enum is used to send requests to the USB Bulk Transfer Handler.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, defmt::Format)]
+pub enum BulkTransferRequest {
+    Reset,
+}
+
+/// USB Mass Storage Class Control Handler
+/// This handler is used to handle the control requests for the Mass Storage Class.
+/// It supports the Mass Storage Reset and Get Max LUN requests.
+pub struct MscCtrlHandler<'d> {
     if_num: InterfaceNumber,
-    mass_storage_reset_occurred: Mutex<NoopRawMutex, bool>,
+    sender: DynamicSender<'d, BulkTransferRequest>,
+}
+
+/// USB Mass Storage Class Bulk Handler
+/// This handler is used to handle the bulk transfers for the Mass Storage Class.
+pub struct MscBulkHandler<'d, D: Driver<'d>> {
+    receiver: DynamicReceiver<'d, BulkTransferRequest>,
     read_ep: Option<<D as Driver<'d>>::EndpointOut>,
     write_ep: Option<<D as Driver<'d>>::EndpointIn>,
 }
 
-impl<'d, D: Driver<'d>> Handler for MscHandler<'d, D> {
+impl<'d> Handler for MscCtrlHandler<'d> {
     fn control_out<'a>(&'a mut self, req: Request, buf: &'a [u8]) -> Option<OutResponse> {
         debug!("Got control_out, request={}, buf={:a}", req, buf);
         None
@@ -242,8 +259,10 @@ impl<'d, D: Driver<'d>> Handler for MscHandler<'d, D> {
             x if x == ClassSpecificRequest::MassStorageReset as u8 => {
                 // Mass Storage Reset
                 debug!("Mass Storage Reset");
-                *self.mass_storage_reset_occurred.get_mut() = true;
-                Some(InResponse::Accepted(&buf[..0]))
+                match self.sender.try_send(BulkTransferRequest::Reset) {
+                    Ok(_) => Some(InResponse::Accepted(&buf[..0])),
+                    Err(_) => Some(InResponse::Rejected),
+                }
             }
             x if x == ClassSpecificRequest::GetMaxLun as u8 && req.length == 1 => {
                 // Get Max LUN
@@ -259,32 +278,74 @@ impl<'d, D: Driver<'d>> Handler for MscHandler<'d, D> {
     }
 }
 
-impl<'d, D: Driver<'d>> MscHandler<'d, D> {
-    pub fn new() -> Self {
+impl<'d> MscCtrlHandler<'d> {
+    pub fn new<const N: usize>(
+        channel: &'d Channel<CriticalSectionRawMutex, BulkTransferRequest, N>,
+    ) -> Self {
         Self {
             if_num: InterfaceNumber(0),
-            mass_storage_reset_occurred: Mutex::new(false),
+            sender: channel.dyn_sender(),
+        }
+    }
+
+    pub fn build<'a, D: Driver<'d>>(
+        self: &'d mut Self,
+        builder: &mut Builder<'d, D>,
+        config: Config<'d>,
+        bulk_handler: &'a mut MscBulkHandler<'d, D>,
+    ) {
+        // Bulk Only Transport for Mass Storage
+        let mut function = builder.function(
+            MSC_INTERFACE_CLASS,
+            MSC_INTERFACE_SUBCLASS,
+            MSC_INTERFACE_PROTOCOL,
+        );
+        let mut interface = function.interface();
+        let mut alt = interface.alt_setting(
+            MSC_INTERFACE_CLASS,
+            MSC_INTERFACE_SUBCLASS,
+            MSC_INTERFACE_PROTOCOL,
+            None,
+        );
+        bulk_handler.read_ep = Some(alt.endpoint_bulk_out(64));
+        bulk_handler.write_ep = Some(alt.endpoint_bulk_in(64));
+
+        drop(function);
+        builder.handler(self);
+    }
+}
+
+impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
+    pub fn new<const N: usize>(
+        channel: &'d Channel<CriticalSectionRawMutex, BulkTransferRequest, N>,
+    ) -> Self {
+        Self {
+            receiver: channel.dyn_receiver(),
             read_ep: None,
             write_ep: None,
         }
     }
+
     /// Main loop for bulk-only transport
-    pub async fn run(&'d mut self) -> ! {
+    pub async fn run(&mut self) -> ! {
+        crate::assert!(self.read_ep.is_some());
+        crate::assert!(self.write_ep.is_some());
+        let read_ep = self.read_ep.as_mut().unwrap();
+        let write_ep = self.write_ep.as_mut().unwrap();
+
         'main_loop: loop {
-            self.read_ep.as_mut().unwrap().wait_enabled().await;
+            read_ep.wait_enabled().await;
             debug!("Connected");
             'read_ep_loop: loop {
                 // Check if Mass Storage Reset occurred
-                if self.mass_storage_reset_occurred.lock(|x| *x) {
-                    *self.mass_storage_reset_occurred.get_mut() = true;
+                if (self.receiver.try_receive() == Ok(BulkTransferRequest::Reset)) {
                     debug!("Mass Storage Reset");
                     break 'read_ep_loop;
                 }
 
                 // Command Transport
                 let mut read_buf = [0u8; 64];
-                let Ok(read_cbw_size) = self.read_ep.as_mut().unwrap().read(&mut read_buf).await
-                else {
+                let Ok(read_cbw_size) = read_ep.read(&mut read_buf).await else {
                     error!("Read EP Error");
                     break 'read_ep_loop;
                 };
@@ -310,9 +371,7 @@ impl<'d, D: Driver<'d>> MscHandler<'d, D> {
                 match cbw_packet.data_direction() {
                     DataDirection::HostToDevice => {
                         // Read data from the host
-                        let Ok(read_data_size) =
-                            self.read_ep.as_mut().unwrap().read(&mut read_buf).await
-                        else {
+                        let Ok(read_data_size) = read_ep.read(&mut read_buf).await else {
                             error!("Read EP Error");
                             break 'read_ep_loop;
                         };
@@ -332,10 +391,7 @@ impl<'d, D: Driver<'d>> MscHandler<'d, D> {
                         }
 
                         debug!("Write Data: {:#x}", write_data_buf);
-                        let Ok(_) = self
-                            .write_ep
-                            .as_mut()
-                            .unwrap()
+                        let Ok(_) = write_ep
                             .write(&write_data_buf[0..write_length as usize])
                             .await
                         else {
@@ -354,36 +410,12 @@ impl<'d, D: Driver<'d>> MscHandler<'d, D> {
                 // Status Transport
                 let csw_data = csw_packet.to_data();
                 debug!("Send CSW: {:#x}", csw_packet);
-                let Ok(_) = self.write_ep.as_mut().unwrap().write(&csw_data).await else {
+                let Ok(_) = write_ep.write(&csw_data).await else {
                     error!("Write EP Error");
                     break 'read_ep_loop;
                 };
             }
             debug!("Disconnected");
         }
-    }
-    pub fn build(&'d mut self, builder: &mut Builder<'d, D>, config: Config<'d>) {
-        // Bulk Only Transport for Mass Storage
-        let mut function = builder.function(
-            MSC_INTERFACE_CLASS,
-            MSC_INTERFACE_SUBCLASS,
-            MSC_INTERFACE_PROTOCOL,
-        );
-        let mut interface = function.interface();
-        let mut alt = interface.alt_setting(
-            MSC_INTERFACE_CLASS,
-            MSC_INTERFACE_SUBCLASS,
-            MSC_INTERFACE_PROTOCOL,
-            None,
-        );
-        let read_ep = alt.endpoint_bulk_out(64);
-        let write_ep = alt.endpoint_bulk_in(64);
-        self.if_num = interface.interface_number();
-        self.read_ep = Some(read_ep);
-        self.write_ep = Some(write_ep);
-
-        // Control Transport for support of Mass Storage Reset and Get Max LUN
-        drop(function);
-        builder.handler(self);
     }
 }
