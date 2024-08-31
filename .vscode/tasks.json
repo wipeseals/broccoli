@@ -9,7 +9,10 @@
             "command": "cargo run --release",
             "options": {
                 "cwd": "${workspaceFolder}/${input:crate}"
-            }
+            },
+            "problemMatcher": [
+                "$rustc"
+            ]
         },
         {
             "label": "build release",
@@ -17,7 +20,10 @@
             "command": "cargo build --release",
             "options": {
                 "cwd": "${workspaceFolder}/${input:crate}"
-            }
+            },
+            "problemMatcher": [
+                "$rustc"
+            ]
         },
         {
             "label": "run debug",
@@ -25,7 +31,10 @@
             "command": "cargo run",
             "options": {
                 "cwd": "${workspaceFolder}/${input:crate}"
-            }
+            },
+            "problemMatcher": [
+                "$rustc"
+            ]
         },
         {
             "label": "build debug",
@@ -33,7 +42,10 @@
             "command": "cargo build",
             "options": {
                 "cwd": "${workspaceFolder}/${input:crate}"
-            }
+            },
+            "problemMatcher": [
+                "$rustc"
+            ]
         },
         {
             "label": "fmt",
@@ -41,7 +53,10 @@
             "command": "cargo fmt -- --check",
             "options": {
                 "cwd": "${workspaceFolder}/${input:crate}"
-            }
+            },
+            "problemMatcher": [
+                "$rustc"
+            ]
         },
         {
             "label": "fmt fix",
@@ -60,7 +75,10 @@
             "command": "cargo clippy --all-features -- --deny=warnings",
             "options": {
                 "cwd": "${workspaceFolder}/${input:crate}"
-            }
+            },
+            "problemMatcher": [
+                "$rustc"
+            ]
         },
         {
             "label": "clippy fix",
@@ -68,7 +86,10 @@
             "command": "cargo clippy --fix --allow-dirty --allow-staged --all-features -- --deny=warnings",
             "options": {
                 "cwd": "${workspaceFolder}/${input:crate}"
-            }
+            },
+            "problemMatcher": [
+                "$rustc"
+            ]
         }
     ],
     "inputs": [
