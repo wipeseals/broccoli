@@ -23,6 +23,9 @@ use export::debug;
 use static_cell::StaticCell;
 
 use crate::channel::{LedState, CHANNEL_USB_TO_LEDCTRL};
+use crate::usb::scsi::{
+    AdditionalSenseCodeType, RequestSenseData, ScsiCommand, SenseKey, REQUEST_SENSE_DATA_SIZE,
+};
 
 // interfaceClass: 0x08 (Mass Storage)
 const MSC_INTERFACE_CLASS: u8 = 0x08;
@@ -30,6 +33,8 @@ const MSC_INTERFACE_CLASS: u8 = 0x08;
 const MSC_INTERFACE_SUBCLASS: u8 = 0x06;
 // interfaceProtocol: 0x50 (Bulk Only Transport)
 const MSC_INTERFACE_PROTOCOL: u8 = 0x50;
+// CBW dCBWDataTransferLength
+const BULK_TRANSFER_MAX_DATA_TRANSFER_LENGTH: usize = 256;
 
 #[repr(u8)]
 #[derive(Debug, Copy, Clone, defmt::Format)]
@@ -70,7 +75,7 @@ struct CommandBlockWrapperPacket {
 
 /// Bulk Transport data block wrapper packet
 #[repr(u8)]
-#[derive(Debug, Copy, Clone, defmt::Format)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, defmt::Format)]
 enum DataDirection {
     HostToDevice,
     DeviceToHost,
@@ -227,15 +232,20 @@ pub enum BulkTransferRequest {
 /// This handler is used to handle the control requests for the Mass Storage Class.
 /// It supports the Mass Storage Reset and Get Max LUN requests.
 pub struct MscCtrlHandler<'d> {
+    /// Interface Number
     if_num: InterfaceNumber,
+    /// Bulk Transfer Request Sender (for Mass Storage Reset)
     sender: DynamicSender<'d, BulkTransferRequest>,
 }
 
 /// USB Mass Storage Class Bulk Handler
 /// This handler is used to handle the bulk transfers for the Mass Storage Class.
 pub struct MscBulkHandler<'d, D: Driver<'d>> {
+    /// Bulk Transfer Request Receiver (for Mass Storage Reset)
     receiver: DynamicReceiver<'d, BulkTransferRequest>,
+    /// Bulk Endpoint Out
     read_ep: Option<<D as Driver<'d>>::EndpointOut>,
+    /// Bulk Endpoint In
     write_ep: Option<<D as Driver<'d>>::EndpointIn>,
 }
 
@@ -332,34 +342,47 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
         crate::assert!(self.write_ep.is_some());
         let read_ep = self.read_ep.as_mut().unwrap();
         let write_ep = self.write_ep.as_mut().unwrap();
-
         'main_loop: loop {
+            // EndPoint有効待ち
             read_ep.wait_enabled().await;
             debug!("Connected");
+
+            // Request Sense CommandでError reportingが必要なので、前回の情報を保持しておく
+            let mut latest_sense_data: Option<RequestSenseData> = None;
+            // Phase Error時の対応用
+            let mut phase_error_tag: Option<u32> = None;
+
             'read_ep_loop: loop {
                 // Check if Mass Storage Reset occurred
                 if (self.receiver.try_receive() == Ok(BulkTransferRequest::Reset)) {
                     debug!("Mass Storage Reset");
+                    phase_error_tag = None;
                     break 'read_ep_loop;
                 }
 
                 // Command Transport
-                let mut read_buf = [0u8; 64];
+                let mut read_buf = [0u8; BULK_TRANSFER_MAX_DATA_TRANSFER_LENGTH];
                 let Ok(read_cbw_size) = read_ep.read(&mut read_buf).await else {
-                    error!("Read EP Error");
+                    error!("Read EP Error (CBW)");
+                    phase_error_tag = None; // unknown tag
                     break 'read_ep_loop;
                 };
                 let Some(cbw_packet) = CommandBlockWrapperPacket::from_data(&read_buf) else {
                     error!("Invalid CBW: {:#x}", read_buf);
-                    continue;
+                    phase_error_tag = None; // unknown tag
+                    break 'read_ep_loop;
                 };
                 if !cbw_packet.is_valid_signature() {
                     error!("Invalid CBW signature: {:#x}", cbw_packet);
-                    continue;
+                    phase_error_tag = None; // unknown tag
+                    break 'read_ep_loop;
+                };
+                if cbw_packet.command_length == 0 {
+                    error!("Invalid CBW command length: {:#x}", cbw_packet);
+                    phase_error_tag = None; // unknown tag
+                    break 'read_ep_loop;
                 };
                 debug!("Got CBW: {:#x}", cbw_packet);
-
-                // TODO: Parse SCSI Command
 
                 // Prepare CSW
                 let mut csw_packet = CommandStatusWrapperPacket::new();
@@ -367,42 +390,66 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                 csw_packet.data_residue = 0;
                 csw_packet.status = CommandBlockStatus::CommandPassed;
 
-                // Data Transport
-                match cbw_packet.data_direction() {
-                    DataDirection::HostToDevice => {
-                        // Read data from the host
-                        let Ok(read_data_size) = read_ep.read(&mut read_buf).await else {
-                            error!("Read EP Error");
-                            break 'read_ep_loop;
-                        };
+                // HostToDeviceの場合、PhaseError対策に先に読んでデータを保持しておく
+                if cbw_packet.data_direction() == DataDirection::HostToDevice {
+                    let Ok(read_data_size) = read_ep.read(&mut read_buf).await else {
+                        phase_error_tag = Some(cbw_packet.tag);
+                        break 'read_ep_loop;
+                    };
+                }
+                // DeviceToHostの場合の書くためのバッファ
+                let mut write_buf = [0u8; BULK_TRANSFER_MAX_DATA_TRANSFER_LENGTH];
+                let write_len = cbw_packet.data_transfer_length as usize;
 
-                        // TODO: Process data. 問題があればstatus更新しておく
-
-                        debug!("Read Data: {:#x}", read_buf);
+                // Parse SCSI Command
+                let scsi_commands = cbw_packet.get_commands();
+                let scsi_command = scsi_commands[0];
+                match scsi_command {
+                    x if x == ScsiCommand::TestUnitReady as u8 => {
+                        debug!("Test Unit Ready");
+                        // カードの抜き差しなどはないので問題無しで応答
+                        csw_packet.status = CommandBlockStatus::CommandPassed;
                     }
-                    DataDirection::DeviceToHost => {
-                        // Write data to the host
-                        let write_length = cbw_packet.data_transfer_length;
-                        let mut write_data_buf = [0u8; 64];
-
-                        // TODO: Prepare data
-                        for (i, elem) in write_data_buf.iter_mut().enumerate() {
-                            *elem = i as u8;
+                    x if x == ScsiCommand::RequestSense as u8 => {
+                        debug!("Request Sense");
+                        // Error reporting
+                        if latest_sense_data.is_none() {
+                            latest_sense_data = Some(RequestSenseData::from(
+                                SenseKey::NoSense,
+                                AdditionalSenseCodeType::NoAdditionalSenseInformation,
+                            ));
                         }
 
-                        debug!("Write Data: {:#x}", write_data_buf);
-                        let Ok(_) = write_ep
-                            .write(&write_data_buf[0..write_length as usize])
-                            .await
-                        else {
-                            error!("Write EP Error");
+                        latest_sense_data
+                            .unwrap()
+                            .prepare_to_buf(&mut write_buf[0..REQUEST_SENSE_DATA_SIZE]);
+                        debug!("Write Data: {:#x}", latest_sense_data);
+                        latest_sense_data = None;
+                        let Ok(_) = write_ep.write(&write_buf[0..write_len]).await else {
+                            phase_error_tag = Some(cbw_packet.tag);
                             break 'read_ep_loop;
                         };
+                        csw_packet.status = CommandBlockStatus::CommandPassed;
+                        // 18byte + reserved 2byte のため、transfer_lengthと合わない場合の報告
+                        if write_len > REQUEST_SENSE_DATA_SIZE {
+                            csw_packet.data_residue = (write_len - REQUEST_SENSE_DATA_SIZE) as u32;
+                        }
+                    }
+                    _ => {
+                        error!("Unsupported Command: {:#x}", scsi_command);
+                        latest_sense_data = Some(RequestSenseData::from(
+                            SenseKey::IllegalRequest,
+                            AdditionalSenseCodeType::IllegalRequestInvalidCommand,
+                        ));
+                        csw_packet.status = CommandBlockStatus::CommandFailed;
 
-                        // もし送信するデータがCBW指定値より小さい場合、CSWのdata_residueを設定する
-                        if write_length < cbw_packet.data_transfer_length {
-                            csw_packet.data_residue =
-                                (cbw_packet.data_transfer_length - write_length);
+                        // Phase Error対策に、DeviceToHostの場合はデータを書いておく
+                        if cbw_packet.data_direction() == DataDirection::DeviceToHost {
+                            debug!("Write Data: {:#x}", write_buf);
+                            let Ok(_) = write_ep.write(&write_buf[0..write_len]).await else {
+                                phase_error_tag = Some(cbw_packet.tag);
+                                break 'read_ep_loop;
+                            };
                         }
                     }
                 }
@@ -414,6 +461,21 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                     error!("Write EP Error");
                     break 'read_ep_loop;
                 };
+
+                // ループ内の処理をやりきれるケースはPhaseErrorが発生していないので、tagをクリア
+                phase_error_tag = None;
+            }
+
+            if let Some(tag) = phase_error_tag {
+                error!("Phase Error");
+                // CSW で Phase Error を返す
+                let mut csw_packet = CommandStatusWrapperPacket::new();
+                csw_packet.tag = tag;
+                csw_packet.data_residue = 0;
+                csw_packet.status = CommandBlockStatus::PhaseError;
+                let csw_data = csw_packet.to_data();
+                // 失敗してもハンドリング無理
+                write_ep.write(&csw_data).await;
             }
             debug!("Disconnected");
         }
