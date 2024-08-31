@@ -19,11 +19,6 @@ impl<const U32DATA_N: usize> BitArr<U32DATA_N> {
             data: [0; U32DATA_N],
         }
     }
-    pub fn default() -> Self {
-        Self {
-            data: [0; U32DATA_N],
-        }
-    }
     /// Returns the number of bits in the bit array.
     pub fn get_idx(&self, idx: usize) -> (usize, usize) {
         let data_idx = idx / U32_BIT_WIDTH;
