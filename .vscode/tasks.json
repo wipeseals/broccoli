@@ -8,7 +8,7 @@
             "type": "shell",
             "command": "cargo run --release",
             "options": {
-                "cwd": "${workspaceFolder}/broccoli-app-rp2040"
+                "cwd": "${workspaceFolder}/${input:crate}"
             }
         },
         {
@@ -16,7 +16,7 @@
             "type": "shell",
             "command": "cargo build --release",
             "options": {
-                "cwd": "${workspaceFolder}/broccoli-app-rp2040"
+                "cwd": "${workspaceFolder}/${input:crate}"
             }
         },
         {
@@ -24,7 +24,7 @@
             "type": "shell",
             "command": "cargo run",
             "options": {
-                "cwd": "${workspaceFolder}/broccoli-app-rp2040"
+                "cwd": "${workspaceFolder}/${input:crate}"
             }
         },
         {
@@ -32,7 +32,7 @@
             "type": "shell",
             "command": "cargo build",
             "options": {
-                "cwd": "${workspaceFolder}/broccoli-app-rp2040"
+                "cwd": "${workspaceFolder}/${input:crate}"
             }
         },
         {
@@ -40,15 +40,26 @@
             "type": "shell",
             "command": "cargo fmt -- --check",
             "options": {
-                "cwd": "${workspaceFolder}/broccoli-app-rp2040"
+                "cwd": "${workspaceFolder}/${input:crate}"
             }
+        },
+        {
+            "label": "fmt fix",
+            "type": "shell",
+            "command": "cargo fmt",
+            "options": {
+                "cwd": "${workspaceFolder}/${input:crate}"
+            },
+            "problemMatcher": [
+                "$rustc"
+            ]
         },
         {
             "label": "clippy",
             "type": "shell",
             "command": "cargo clippy --all-features -- --deny=warnings",
             "options": {
-                "cwd": "${workspaceFolder}/broccoli-app-rp2040"
+                "cwd": "${workspaceFolder}/${input:crate}"
             }
         },
         {
@@ -56,8 +67,19 @@
             "type": "shell",
             "command": "cargo clippy --fix --allow-dirty --allow-staged --all-features -- --deny=warnings",
             "options": {
-                "cwd": "${workspaceFolder}/broccoli-app-rp2040"
+                "cwd": "${workspaceFolder}/${input:crate}"
             }
+        }
+    ],
+    "inputs": [
+        {
+            "type":"pickString",
+            "id": "crate",
+            "description": "Select the crate to run the task for",
+            "options": [
+                "broccoli-app-rp2040",
+                "broccoli-core",
+            ]
         },
     ]
 }
