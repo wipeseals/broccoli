@@ -135,11 +135,7 @@ pub trait Driver {
     async fn read_status_async(&mut self, cs_index: usize) -> StatusOutput;
 
     /// Erase NAND IC block
-    fn erase_block(
-        &mut self,
-        cs_index: usize,
-        address: Address,
-    ) -> Result<StatusOutput, Error>;
+    fn erase_block(&mut self, cs_index: usize, address: Address) -> Result<StatusOutput, Error>;
     async fn erase_block_async(
         &mut self,
         cs_index: usize,
