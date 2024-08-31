@@ -22,7 +22,7 @@ use embassy_usb::{Builder, Config, Handler};
 use export::debug;
 use static_cell::StaticCell;
 
-use crate::channel::{LedState, LEDCONTROLCHANNEL};
+use crate::channel::{LedState, CHANNEL_USB_TO_LEDCTRL};
 
 // interfaceClass: 0x08 (Mass Storage)
 const MSC_INTERFACE_CLASS: u8 = 0x08;

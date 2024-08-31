@@ -6,4 +6,4 @@ pub enum LedState {
     Off,
     Toggle,
 }
-pub static LEDCONTROLCHANNEL: Channel<CriticalSectionRawMutex, LedState, 4> = Channel::new();
+pub static CHANNEL_USB_TO_LEDCTRL: Channel<CriticalSectionRawMutex, LedState, 4> = Channel::new();
