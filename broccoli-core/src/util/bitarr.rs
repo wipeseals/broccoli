@@ -7,6 +7,12 @@ pub struct BitArr<const U32DATA_N: usize> {
     pub data: [u32; U32DATA_N],
 }
 
+impl<const U32DATA_N: usize> Default for BitArr<U32DATA_N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<const U32DATA_N: usize> BitArr<U32DATA_N> {
     pub fn new() -> Self {
         Self {
@@ -62,7 +68,7 @@ mod tests {
         const U32DATA_N: usize = 16;
         let mut bitarr = BitArr::<U32DATA_N>::new();
         for i in 0..U32DATA_N {
-            assert_eq!(bitarr.get(i), false);
+            assert!(!bitarr.get(i));
         }
         assert_eq!(bitarr.data_len(), U32DATA_N);
     }
@@ -73,9 +79,9 @@ mod tests {
         let mut bitarr = BitArr::<U32DATA_N>::new();
         for i in 0..U32DATA_N {
             bitarr.set(i, true);
-            assert_eq!(bitarr.get(i), true);
+            assert!(bitarr.get(i));
             bitarr.set(i, false);
-            assert_eq!(bitarr.get(i), false);
+            assert!(!bitarr.get(i));
         }
     }
 
@@ -85,11 +91,11 @@ mod tests {
         let mut bitarr = BitArr::<U32DATA_N>::new();
         bitarr.fill(true);
         for i in 0..U32DATA_N {
-            assert_eq!(bitarr.get(i), true);
+            assert!(bitarr.get(i));
         }
         bitarr.fill(false);
         for i in 0..U32DATA_N {
-            assert_eq!(bitarr.get(i), false);
+            assert!(!bitarr.get(i));
         }
     }
 }

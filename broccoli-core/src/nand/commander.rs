@@ -17,6 +17,12 @@ pub struct Commander {
     pub bad_block_bitarr: AllIcNandBlockBitArr,
 }
 
+impl Default for Commander {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Commander {
     pub fn new() -> Self {
         Self {
@@ -71,7 +77,7 @@ impl Commander {
 
     /// Restore Bad Blocks
     pub fn restore_badblock_bitarr(&mut self, all_bitmap: &AllIcNandBlockBitArr) {
-        self.bad_block_bitarr = all_bitmap.clone();
+        self.bad_block_bitarr = *all_bitmap;
     }
 }
 
