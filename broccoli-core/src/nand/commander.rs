@@ -78,7 +78,7 @@ impl Commander {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::driver::{MockDriver, ID_READ_EXPECT_DATA};
+    use crate::nand::driver::{MockDriver, ID_READ_EXPECT_DATA};
 
     #[tokio::test]
     async fn test_setup() {

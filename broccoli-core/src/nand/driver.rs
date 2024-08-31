@@ -112,10 +112,7 @@ pub trait Driver {
 
     /// Read NAND IC ID
     fn read_id<'a>(&'a mut self, cs_index: usize) -> (bool, [u8; ID_READ_CMD_BYTES]);
-    async fn read_id_async<'a>(
-        &'a mut self,
-        cs_index: usize,
-    ) -> (bool, [u8; ID_READ_CMD_BYTES]);
+    async fn read_id_async<'a>(&'a mut self, cs_index: usize) -> (bool, [u8; ID_READ_CMD_BYTES]);
 
     /// Read NAND IC data
     fn read_data<'a>(
@@ -165,7 +162,6 @@ pub trait Driver {
         write_bytes: usize,
     ) -> Result<StatusOutput, Error>;
 }
-
 
 mod tests {
     use super::*;
