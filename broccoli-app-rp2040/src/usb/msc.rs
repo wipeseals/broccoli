@@ -42,9 +42,9 @@ enum ClassSpecificRequest {
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, defmt::Format)]
 enum BulkTransportSignature {
-    CommandBlockWrapper = 0x43425355,
-    CommandStatusWrapper = 0x53425355,
-    DataBlockWrapper = 0x44425355,
+    CommandBlock = 0x43425355,
+    CommandStatus = 0x53425355,
+    DataBlock = 0x44425355,
 }
 
 /// Bulk Transport command block wrapper packet
@@ -88,7 +88,7 @@ enum CommandBlockStatus {
 impl CommandBlockWrapperPacket {
     fn new() -> Self {
         Self {
-            signature: BulkTransportSignature::CommandBlockWrapper as u32,
+            signature: BulkTransportSignature::CommandBlock as u32,
             tag: 0,
             data_transfer_length: 0,
             flags: 0,
@@ -118,11 +118,11 @@ impl CommandBlockWrapperPacket {
     }
 
     fn is_valid_signature(&self) -> bool {
-        self.signature == (BulkTransportSignature::CommandBlockWrapper as u32)
+        self.signature == (BulkTransportSignature::CommandBlock as u32)
     }
 
     /// Convert to byte array
-    fn to_data(&self) -> [u8; 31] {
+    fn to_data(self) -> [u8; 31] {
         let mut data = [0; 31];
         LittleEndian::write_u32(&mut data[0..4], self.signature);
         LittleEndian::write_u32(&mut data[4..8], self.tag);
@@ -167,7 +167,7 @@ struct CommandStatusWrapperPacket {
 impl CommandStatusWrapperPacket {
     fn new() -> Self {
         Self {
-            signature: BulkTransportSignature::CommandStatusWrapper as u32,
+            signature: BulkTransportSignature::CommandStatus as u32,
             tag: 0,
             data_residue: 0,
             status: CommandBlockStatus::CommandPassed,
@@ -196,7 +196,7 @@ impl CommandStatusWrapperPacket {
     }
 
     /// Convert to byte array
-    fn to_data(&self) -> [u8; 13] {
+    fn to_data(self) -> [u8; 13] {
         let mut data = [0; 13];
         LittleEndian::write_u32(&mut data[0..4], self.signature);
         LittleEndian::write_u32(&mut data[4..8], self.tag);
@@ -212,7 +212,7 @@ impl CommandStatusWrapperPacket {
 
     /// Check if the signature is valid
     fn is_valid_signature(&self) -> bool {
-        self.signature == (BulkTransportSignature::CommandStatusWrapper as u32)
+        self.signature == (BulkTransportSignature::CommandStatus as u32)
     }
 }
 
@@ -289,7 +289,7 @@ impl<'d> MscCtrlHandler<'d> {
     }
 
     pub fn build<'a, D: Driver<'d>>(
-        self: &'d mut Self,
+        &'d mut self,
         builder: &mut Builder<'d, D>,
         config: Config<'d>,
         bulk_handler: &'a mut MscBulkHandler<'d, D>,
@@ -386,8 +386,8 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                         let mut write_data_buf = [0u8; 64];
 
                         // TODO: Prepare data
-                        for i in 0..64 {
-                            write_data_buf[i] = i as u8;
+                        for (i, elem) in write_data_buf.iter_mut().enumerate() {
+                            *elem = i as u8;
                         }
 
                         debug!("Write Data: {:#x}", write_data_buf);
