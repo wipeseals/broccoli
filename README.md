@@ -1,5 +1,7 @@
 # broccoli
 
+[![Rust](https://github.com/wipeseals/broccoli/actions/workflows/rust.yml/badge.svg)](https://github.com/wipeseals/broccoli/actions/workflows/rust.yml)
+
 Toy USB Massstorage device running on raspberry pi pico implemented in Rust.
 
 ## Features
