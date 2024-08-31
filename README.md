@@ -13,8 +13,7 @@ TODO:
 ### Structure
 
 - `broccoli-core`: 基本機能を実装した crate
-- `broccoli-driver-rp2040`: `broccoli-core` のうち、RP2040 専用で実装されている要素
-- `broccoli-app-rp2040`: `broccoli-core`, `broccoli-driver-rp2040` を参照し実装されたアプリケーション本体
+- `broccoli-app-rp2040`: JISC-SSD RP2040 上で動作することを想定した実装
 
 ## Reference
 

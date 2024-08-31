@@ -23,9 +23,6 @@ jobs:
           - crate: broccoli-core
             skip_clippy: false
             skip_test: false
-          - crate: broccoli-driver-rp2040
-            skip_clippy: false
-            skip_test: false
           - crate: broccoli-app-rp2040
             skip_clippy: true
             skip_test: true
