@@ -20,21 +20,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - crate: broccoli-core
+            skip_clippy: false
+            skip_test: false
           - crate: broccoli-app-rp2040
             skip_clippy: true
             skip_test: true
-          - crate: broccoli-codec
-            skip_clippy: false
-            skip_test: false
-          - crate: broccoli-datamap
-            skip_clippy: false
-            skip_test: false
-          - crate: broccoli-nandio
-            skip_clippy: false
-            skip_test: false
-          - crate: broccoli-nandio-rp2040
-            skip_clippy: false
-            skip_test: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v2

@@ -1,7 +1,4 @@
-#![allow(unused, dead_code)]
-#![cfg_attr(not(test), no_std)]
-
-extern crate bitfield;
+use crate::util::bitarr::BitArr;
 use bitfield::bitfield;
 
 /// Usable NAND Page Size
@@ -19,6 +16,18 @@ pub const MIN_IC: usize = 1;
 /// Maximum number of IC
 pub const MAX_IC: usize = 2;
 
+/// IC Bitmap Size
+pub const IC_BITMAP_U32_SIZE: usize = (MAX_IC / 32) + 1;
+/// Block Bitmap Size
+pub const BLOCK_BITMAP_U32_SIZE: usize = (MAX_BLOCKS_PER_IC / 32) + 1;
+
+/// IC Bitmap
+pub type IcBitmapArr = BitArr<IC_BITMAP_U32_SIZE>;
+/// Block Bitmap
+pub type NandBlockBitArr = BitArr<BLOCK_BITMAP_U32_SIZE>;
+/// All IC Block Bitmap
+pub type AllIcNandBlockBitArr = [NandBlockBitArr; MAX_IC];
+
 /// Total NAND Page Size (Data + Spare = 2176 bytes)
 pub const TOTAL_BYTES_PER_PAGE: usize = DATA_BYTES_PER_PAGE + SPARE_BYTES_PER_PAGE;
 /// Total Bytes per Block (2176 * 64 = 139264 bytes)
@@ -34,6 +43,7 @@ pub const MIN_BYTES_PER_IC: usize = MIN_BLOCKS_PER_IC * BYTES_PER_BLOCK;
 
 /// Address for NAND
 ///
+/// Read/Write
 /// |              | IO7  | IO6  | IO5  | IO4  | IO3  | IO2  | IO1  | IO0  |
 /// | ------------ | ---  | ---  | ---  | ---  | ---  | ---  | ---  | ---  |
 /// | First Cycle  | CA7  | CA6  | CA5  | CA4  | CA3  | CA2  | CA1  | CA0  |
@@ -41,58 +51,100 @@ pub const MIN_BYTES_PER_IC: usize = MIN_BLOCKS_PER_IC * BYTES_PER_BLOCK;
 /// | Third Cycle  | PA7  | PA6  | PA5  | PA4  | PA3  | PA2  | PA1  | PA0  |
 /// | Fourth Cycle | PA15 | PA14 | PA13 | PA12 | PA11 | PA10 | PA9  | PA8  |
 ///
+/// Auto Block Erase
+/// |              | IO7  | IO6  | IO5  | IO4  | IO3  | IO2  | IO1  | IO0  |
+/// | ------------ | ---  | ---  | ---  | ---  | ---  | ---  | ---  | ---  |
+/// | First Cycle  | PA7  | PA6  | PA5  | PA4  | PA3  | PA2  | PA1  | PA0  |
+/// | Second Cycle | PA15 | PA14 | PA13 | PA12 | PA11 | PA10 | PA9  | PA8  |
+///
 /// CAx: Column Address
 /// PAx: Page Address
 ///   PA15~PA6: Block Address
 
 bitfield! {
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+    /// Chip Column Address.
     pub struct Address(u32);
+    /// column address: 12bit 0 ~ 2176
     pub column, set_column: 11,0;
-    pub reserved, _: 15,12;
+    /// chip_id: 4bit 0 ~ 15 (実際には0,1しか使わない)
+    /// reservedを間借りしており、Addressing時はLow固定にする必要あり
+    pub chip_id, set_chip_id: 15,12;
+    /// page address: 6bit 0 ~ 63
     pub page, set_page: 21,16;
+    /// block address: 10bit 0 ~ 1023
     pub block, set_block: 31,22;
 }
 
 impl Address {
-    /// Pack Address into slice. (Column: 0~15, Page: 16~31)
-    pub fn pack_slice(&self) -> [u8; 4] {
-        let data = self.0;
+    pub fn raw(&self) -> u32 {
+        self.0
+    }
+
+    /// Pack Address into slice.
+    pub fn to_full_slice(&self) -> [u8; 4] {
+        let data = self.raw();
         let mut slice = [0u8; 4];
         slice[0] = data as u8;
-        slice[1] = (data >> 8) as u8;
+        // Second Cycle IO4~IO7 = L
+        // reserved部分にchipid入れているので除外する
+        slice[1] = ((data >> 8) as u8) & 0x0F;
         slice[2] = (data >> 16) as u8;
         slice[3] = (data >> 24) as u8;
         slice
     }
 
-    /// Unpack slice into Address. (Column: 0~15, Page: 16~31)
-    pub fn unpack_slice(slice: &[u8; 4]) -> Self {
+    /// Unpack slice into Address.
+    pub fn from_full_slice(slice: &[u8; 4]) -> Self {
         let data = (slice[0] as u32)
             | ((slice[1] as u32) << 8)
             | ((slice[2] as u32) << 16)
             | ((slice[3] as u32) << 24);
         Address(data)
     }
+
+    /// Pack Page Address into slice.
+    pub fn to_page_slice(&self) -> [u8; 2] {
+        let data = self.raw();
+        let mut slice = [0u8; 2];
+        // PA7~PA0
+        slice[0] = (data >> 16) as u8;
+        // PA15~PA8
+        slice[1] = (data >> 24) as u8;
+        slice
+    }
+
+    /// Unpack slice into Page Address.
+    pub fn from_page_slice(slice: &[u8; 2]) -> Self {
+        let data = ((slice[0] as u32) << 16) | ((slice[1] as u32) << 24);
+        Address(data)
+    }
+    /// address from block
+    pub fn from_block(block: u16) -> Self {
+        let mut addr = Address(0);
+        addr.set_block(block as u32);
+        addr
+    }
 }
 
+#[allow(clippy::unusual_byte_groupings)]
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_pack_slice() {
+    fn test_to_full_slice() {
         let mut address = Address::default();
         address.set_column(0b101010101010);
         address.set_page(0b110011001100);
         address.set_block(0b111100001111);
-        let packed = address.pack_slice();
+        let packed = address.to_full_slice();
         let expect_value: u32 = 0b_1100001111_001100_0000_101010101010;
         //                         block      page  rsv   column
         //                         10bit      6bit  4bit  12bit
         let expect_packed = [
             (expect_value & 0xFF) as u8,
-            ((expect_value >> 8) & 0xFF) as u8,
+            ((expect_value >> 8) & 0x0F) as u8, // chip_id=L固定
             ((expect_value >> 16) & 0xFF) as u8,
             ((expect_value >> 24) & 0xFF) as u8,
         ];
@@ -100,11 +152,11 @@ mod tests {
     }
 
     #[test]
-    fn test_unpack_slice() {
+    fn test_from_full_slice() {
         let packed = [0b10101010, 0b11001100, 0b11110000, 0b11111111];
         //                     column[7:0]  column[12:9]  block[1:0] block[15:2]
         //                                                page[5:0]
-        let address = Address::unpack_slice(&packed);
+        let address = Address::from_full_slice(&packed);
         assert_eq!(address.column(), 0b0000_1100_10101010);
         assert_eq!(address.page(), 0b110000);
         assert_eq!(address.block(), 0b11111111_11);

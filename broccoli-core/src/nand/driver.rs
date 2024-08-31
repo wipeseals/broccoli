@@ -1,12 +1,16 @@
-#![allow(unused, dead_code)]
 #![cfg_attr(not(test), no_std)]
 
-extern crate bit_field;
-extern crate bitflags;
+use core::future::Future;
 
-use crate::address::Address;
+use crate::nand::address::Address;
 use bit_field::BitField;
 use bitflags::bitflags;
+
+#[cfg(test)]
+use async_mock::async_mock;
+use async_trait::async_trait;
+
+use trait_variant;
 
 /// ID read bytes
 pub const ID_READ_CMD_BYTES: usize = 5;
@@ -20,7 +24,7 @@ pub const ID_READ_CMD_BYTES: usize = 5;
 /// | Chip Number, Cell Type | 0x80     |
 /// | Page Size, Block Size  | 0x15     |
 /// | District Number        | 0x72     |
-pub const ID_READ_EXPECT_DATA: [u8; 5] = [0x98, 0xF1, 0x80, 0x15, 0x72];
+pub const ID_READ_EXPECT_DATA: [u8; ID_READ_CMD_BYTES] = [0x98, 0xF1, 0x80, 0x15, 0x72];
 
 /// NAND IC Command ID
 #[repr(u8)]
@@ -85,7 +89,76 @@ impl StatusOutput {
     }
 }
 
-#[cfg(test)]
+pub enum Error {
+    Common,
+    Timeout,
+}
+
+#[cfg_attr(test, async_mock)]
+#[cfg_attr(test, async_trait)]
+#[trait_variant::make(Send)]
+pub trait Driver {
+    /// Initialize all pins
+    fn init_pins(&mut self);
+    async fn init_pins_async(&mut self);
+
+    /// Set write protect
+    fn set_write_protect(&mut self, enable: bool);
+    async fn set_write_protect_async(&mut self, enable: bool);
+
+    /// Reset NAND IC
+    fn reset(&mut self, cs_index: usize);
+    async fn reset_async(&mut self, cs_index: usize);
+
+    /// Read NAND IC ID
+    fn read_id(&mut self, cs_index: usize) -> (bool, [u8; ID_READ_CMD_BYTES]);
+    async fn read_id_async(&mut self, cs_index: usize) -> (bool, [u8; ID_READ_CMD_BYTES]);
+
+    /// Read NAND IC data
+    fn read_data(
+        &mut self,
+        cs_index: usize,
+        address: Address,
+        read_data_ref: &mut [u8],
+        read_bytes: usize,
+    ) -> Result<(), Error>;
+    async fn read_data_async<'a>(
+        &'a mut self,
+        cs_index: usize,
+        address: Address,
+        read_data_ref: &mut [u8],
+        read_bytes: usize,
+    ) -> Result<(), Error>;
+
+    /// Read NAND IC status
+    fn read_status(&mut self, cs_index: usize) -> StatusOutput;
+    async fn read_status_async(&mut self, cs_index: usize) -> StatusOutput;
+
+    /// Erase NAND IC block
+    fn erase_block(&mut self, cs_index: usize, address: Address) -> Result<StatusOutput, Error>;
+    async fn erase_block_async(
+        &mut self,
+        cs_index: usize,
+        address: Address,
+    ) -> Result<StatusOutput, Error>;
+
+    /// Write NAND IC data
+    fn write_data(
+        &mut self,
+        cs_index: usize,
+        address: Address,
+        write_data_ref: &[u8],
+        write_bytes: usize,
+    ) -> Result<StatusOutput, Error>;
+    async fn write_data_async<'a>(
+        &'a mut self,
+        cs_index: usize,
+        address: Address,
+        write_data_ref: &[u8],
+        write_bytes: usize,
+    ) -> Result<StatusOutput, Error>;
+}
+
 mod tests {
     use super::*;
 
@@ -119,32 +192,4 @@ mod tests {
         assert!(status.is_data_cache_ready());
         assert!(!status.is_write_protect());
     }
-}
-
-pub enum Error {
-    Common,
-    Timeout,
-}
-
-pub trait Driver {
-    /// Initialize all pins
-    fn init_pins(&mut self);
-
-    /// Reset NAND IC
-    fn reset(&mut self, cs_index: u32);
-
-    /// Read NAND IC ID
-    fn id_read(&mut self, cs_index: u32) -> (bool, [u8; 5]);
-
-    /// Read NAND IC status
-    fn status_read(&mut self, cs_index: u32) -> StatusOutput;
-
-    /// Read NAND IC data
-    fn read_data(
-        &mut self,
-        cs_index: u32,
-        address: Address,
-        read_data_ref: &mut [u8],
-        read_bytes: u32,
-    ) -> Result<(), Error>;
 }

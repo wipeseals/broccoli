@@ -258,7 +258,7 @@ impl NandIoPins<'_> {
 
     /// set CS
     /// cs_index: chip select index
-    pub fn assert_cs(&mut self, cs_index: u32) {
+    pub fn assert_cs(&mut self, cs_index: usize) {
         match cs_index {
             0 => {
                 self.ceb0.set_state(bsp::hal::gpio::PinState::Low).unwrap();
@@ -309,7 +309,7 @@ impl NandIoPins<'_> {
     /// Set Write Protect Enable
     /// enable: write protect enable
     pub fn set_write_protect_enable(&mut self, enable: bool) {
-        // /RBなのでEnalbe時にLow
+        // /WPなのでEnalbe時にLow
         self.wpb
             .set_state(bsp::hal::gpio::PinState::from(!enable))
             .unwrap();

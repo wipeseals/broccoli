@@ -10,6 +10,11 @@ TODO:
 
 TODO:
 
+### Structure
+
+- `broccoli-core`: 基本機能を実装した crate
+- `broccoli-app-rp2040`: JISC-SSD RP2040 上で動作することを想定した実装
+
 ## Reference
 
 - [[VOL-28]JISC-SSD(Jisaku In-Storage Computation SSD 学習ボード)](https://crane-elec.co.jp/products/vol-28/)
