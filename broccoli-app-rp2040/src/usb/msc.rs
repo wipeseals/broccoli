@@ -246,6 +246,12 @@ pub struct MscBulkHandler<'d, D: Driver<'d>> {
     /// Bulk Endpoint In
     write_ep: Option<<D as Driver<'d>>::EndpointIn>,
 
+    /// Vendor ID
+    vendor_id: [u8; 8],
+    /// Product ID
+    product_id: [u8; 16],
+    /// Product Revision Level
+    product_revision_level: [u8; 4],
     /// num of blocks
     num_blocks: u32,
     /// block length
@@ -330,6 +336,9 @@ impl<'d> MscCtrlHandler<'d> {
 
 impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
     pub fn new<const N: usize>(
+        vendor_id: [u8; 8],
+        product_id: [u8; 16],
+        product_revision_level: [u8; 4],
         num_blocks: u32,
         block_size: u32,
         channel: &'d Channel<CriticalSectionRawMutex, BulkTransferRequest, N>,
@@ -338,6 +347,9 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
             receiver: channel.dyn_receiver(),
             read_ep: None,
             write_ep: None,
+            vendor_id,
+            product_id,
+            product_revision_level,
             num_blocks,
             block_size,
         }
@@ -422,7 +434,11 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                         debug!("Inquiry");
                         // Inquiry data. resp fixed data
                         actual_write_len = INQUIRY_COMMAND_DATA_SIZE;
-                        let inquiry_data = InquiryCommandData::new();
+                        let inquiry_data = InquiryCommandData::new(
+                            self.vendor_id,
+                            self.product_id,
+                            self.product_revision_level,
+                        );
                         inquiry_data.prepare_to_buf(&mut write_buf[0..actual_write_len]);
                     }
                     x if x == ScsiCommand::ReadFormatCapacities as u8 => {

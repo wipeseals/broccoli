@@ -19,20 +19,17 @@ use embassy_usb::{Builder, Config, Handler};
 use export::debug;
 use static_cell::StaticCell;
 
+use crate::config::*;
 use crate::usb::msc::{BulkTransferRequest, MscBulkHandler, MscCtrlHandler};
 
 async fn usb_transport_task(driver: Driver<'static, USB>) {
-    let num_blocks = 1024;
-    let block_size = 512;
-    let total_size = num_blocks * block_size;
-
     // Create embassy-usb Config
-    let mut config = Config::new(0xc0de, 0xcafe);
-    config.manufacturer = Some("wipeseals");
-    config.product = Some("broccoli");
-    config.serial_number = Some("snbroccoli");
-    config.max_power = 100;
-    config.max_packet_size_0 = 64;
+    let mut config = Config::new(USB_VID, USB_PID);
+    config.manufacturer = Some(USB_MANUFACTURER);
+    config.product = Some(USB_PRODUCT);
+    config.serial_number = Some(USB_SERIAL_NUMBER);
+    config.max_power = USB_MAX_POWER;
+    config.max_packet_size_0 = USB_MAX_PACKET_SIZE;
 
     let mut config_descriptor = [0; 256];
     let mut bos_descriptor = [0; 256];
@@ -50,7 +47,14 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
         &mut msos_descriptor,
         &mut control_buf,
     );
-    let mut bulk_handler = MscBulkHandler::new(num_blocks, block_size, &channel_ctrl_to_bulk);
+    let mut bulk_handler = MscBulkHandler::new(
+        USB_VENDOR_ID,
+        USB_PRODUCT_ID,
+        USB_DEVICE_VERSION,
+        USB_NUM_BLOCKS,
+        USB_BLOCK_SIZE,
+        &channel_ctrl_to_bulk,
+    );
     ctrl_handler.build(&mut builder, config, &mut bulk_handler);
 
     let mut usb = builder.build();

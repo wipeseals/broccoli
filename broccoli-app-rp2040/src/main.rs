@@ -3,6 +3,7 @@
 #![cfg_attr(not(test), no_main)]
 
 mod channel;
+mod config;
 mod core0;
 mod core1;
 mod usb;

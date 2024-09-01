@@ -352,7 +352,7 @@ pub struct InquiryCommandData {
 }
 
 impl InquiryCommandData {
-    pub fn new() -> Self {
+    pub fn new(vendor_id: [u8; 8], product_id: [u8; 16], product_revision_level: [u8; 4]) -> Self {
         Self {
             peripheral_qualifier: 0,
             peripheral_device_type: 0,
@@ -376,9 +376,9 @@ impl InquiryCommandData {
             linked: 0,
             cmdque: 0,
             vs1: 0,
-            vendor_id: *b"broccoli",
-            product_id: *b"wipeseals devapp",
-            product_revision_level: *b"0001",
+            vendor_id,
+            product_id,
+            product_revision_level,
         }
     }
 
