@@ -459,3 +459,34 @@ impl ReadFormatCapacitiesData {
         buf[9..12].copy_from_slice(&block_length[1..4]);
     }
 }
+
+/// SCSI Read Capacity command length
+pub const READ_CAPACITY_DATA_SIZE: usize = 8;
+
+/// SCSI Read Capacity command structure
+#[derive(Copy, Clone, PartialEq, Eq, defmt::Format)]
+pub struct ReadCapacityData {
+    pub last_lba: u32,
+    pub block_length: u32,
+}
+
+impl ReadCapacityData {
+    pub fn new(last_lba: u32, block_length: u32) -> Self {
+        Self {
+            last_lba,
+            block_length,
+        }
+    }
+
+    pub fn to_data(self) -> [u8; READ_CAPACITY_DATA_SIZE] {
+        let mut buf = [0u8; READ_CAPACITY_DATA_SIZE];
+        self.prepare_to_buf(&mut buf);
+        buf
+    }
+
+    pub fn prepare_to_buf(&self, buf: &mut [u8]) {
+        crate::assert!(buf.len() >= READ_CAPACITY_DATA_SIZE);
+        BigEndian::write_u32(&mut buf[0..4], self.last_lba);
+        BigEndian::write_u32(&mut buf[4..8], self.block_length);
+    }
+}

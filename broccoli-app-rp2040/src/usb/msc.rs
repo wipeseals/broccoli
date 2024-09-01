@@ -434,6 +434,14 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                         read_format_capacities_data
                             .prepare_to_buf(&mut write_buf[0..actual_write_len]);
                     }
+                    x if x == ScsiCommand::ReadCapacity16_10 as u8 => {
+                        debug!("Read Capacity (16)");
+                        // Read Capacity (16) data. resp fixed data
+                        actual_write_len = READ_CAPACITY_DATA_SIZE;
+                        let read_capacity_data =
+                            ReadCapacityData::new(self.num_blocks, self.block_size);
+                        read_capacity_data.prepare_to_buf(&mut write_buf[0..actual_write_len]);
+                    }
                     x if x == ScsiCommand::RequestSense as u8 => {
                         debug!("Request Sense");
                         // Error reporting
