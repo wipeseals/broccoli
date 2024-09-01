@@ -245,6 +245,11 @@ pub struct MscBulkHandler<'d, D: Driver<'d>> {
     read_ep: Option<<D as Driver<'d>>::EndpointOut>,
     /// Bulk Endpoint In
     write_ep: Option<<D as Driver<'d>>::EndpointIn>,
+
+    /// num of blocks
+    num_blocks: u32,
+    /// block length
+    block_size: u32,
 }
 
 impl<'d> Handler for MscCtrlHandler<'d> {
@@ -325,12 +330,16 @@ impl<'d> MscCtrlHandler<'d> {
 
 impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
     pub fn new<const N: usize>(
+        num_blocks: u32,
+        block_size: u32,
         channel: &'d Channel<CriticalSectionRawMutex, BulkTransferRequest, N>,
     ) -> Self {
         Self {
             receiver: channel.dyn_receiver(),
             read_ep: None,
             write_ep: None,
+            num_blocks,
+            block_size,
         }
     }
 
@@ -397,7 +406,8 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                 }
                 // DeviceToHostの場合の書くためのバッファ
                 let mut write_buf = [0u8; BULK_TRANSFER_MAX_DATA_TRANSFER_LENGTH];
-                let write_len = cbw_packet.data_transfer_length as usize;
+                let request_write_len = cbw_packet.data_transfer_length as usize;
+                let mut actual_write_len = 0usize;
 
                 // Parse SCSI Command
                 let scsi_commands = cbw_packet.get_commands();
@@ -411,61 +421,59 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                     x if x == ScsiCommand::Inquiry as u8 => {
                         debug!("Inquiry");
                         // Inquiry data. resp fixed data
+                        actual_write_len = INQUIRY_COMMAND_DATA_SIZE;
                         let inquiry_data = InquiryCommandData::new();
-                        debug!("Write Data: {:#x}", inquiry_data);
-                        inquiry_data.prepare_to_buf(&mut write_buf[0..INQUIRY_COMMAND_DATA_SIZE]);
-                        let Ok(_) = write_ep.write(&write_buf[0..write_len]).await else {
-                            phase_error_tag = Some(cbw_packet.tag);
-                            break 'read_ep_loop;
-                        };
-                        csw_packet.status = CommandBlockStatus::CommandPassed;
-                        // 36byte + reserved 2byte のため、transfer_lengthと合わない場合の報告
-                        if write_len > INQUIRY_COMMAND_DATA_SIZE {
-                            csw_packet.data_residue =
-                                (write_len - INQUIRY_COMMAND_DATA_SIZE) as u32;
-                        }
+                        inquiry_data.prepare_to_buf(&mut write_buf[0..actual_write_len]);
+                    }
+                    x if x == ScsiCommand::ReadFormatCapacities as u8 => {
+                        debug!("Read Format Capacities");
+                        // Read Format Capacities data. resp fixed data
+                        actual_write_len = READ_FORMAT_CAPACITIES_DATA_SIZE;
+                        let read_format_capacities_data =
+                            ReadFormatCapacitiesData::new(self.num_blocks, self.block_size);
+                        read_format_capacities_data
+                            .prepare_to_buf(&mut write_buf[0..actual_write_len]);
                     }
                     x if x == ScsiCommand::RequestSense as u8 => {
                         debug!("Request Sense");
                         // Error reporting
+                        actual_write_len = REQUEST_SENSE_DATA_SIZE;
                         if latest_sense_data.is_none() {
                             latest_sense_data = Some(RequestSenseData::from(
                                 SenseKey::NoSense,
                                 AdditionalSenseCodeType::NoAdditionalSenseInformation,
                             ));
                         }
-
                         latest_sense_data
                             .unwrap()
-                            .prepare_to_buf(&mut write_buf[0..REQUEST_SENSE_DATA_SIZE]);
-                        debug!("Write Data: {:#x}", latest_sense_data);
+                            .prepare_to_buf(&mut write_buf[0..actual_write_len]);
                         latest_sense_data = None;
-                        let Ok(_) = write_ep.write(&write_buf[0..write_len]).await else {
-                            phase_error_tag = Some(cbw_packet.tag);
-                            break 'read_ep_loop;
-                        };
-                        csw_packet.status = CommandBlockStatus::CommandPassed;
-                        // 18byte + reserved 2byte のため、transfer_lengthと合わない場合の報告
-                        if write_len > REQUEST_SENSE_DATA_SIZE {
-                            csw_packet.data_residue = (write_len - REQUEST_SENSE_DATA_SIZE) as u32;
-                        }
                     }
                     _ => {
                         error!("Unsupported Command: {:#x}", scsi_command);
+                        // save latest sense data
                         latest_sense_data = Some(RequestSenseData::from(
                             SenseKey::IllegalRequest,
                             AdditionalSenseCodeType::IllegalRequestInvalidCommand,
                         ));
-                        csw_packet.status = CommandBlockStatus::CommandFailed;
 
-                        // Phase Error対策に、DeviceToHostの場合はデータを書いておく
-                        if cbw_packet.data_direction() == DataDirection::DeviceToHost {
-                            debug!("Write Data: {:#x}", write_buf);
-                            let Ok(_) = write_ep.write(&write_buf[0..write_len]).await else {
-                                phase_error_tag = Some(cbw_packet.tag);
-                                break 'read_ep_loop;
-                            };
-                        }
+                        actual_write_len = 0;
+                        csw_packet.status = CommandBlockStatus::CommandFailed;
+                    }
+                }
+
+                // Data Transport (DeviceToHost)
+                if actual_write_len > 0 {
+                    // transfer data
+                    debug!("Write Data: {:#x}", write_buf[0..actual_write_len]);
+                    let Ok(_) = write_ep.write(&write_buf[0..actual_write_len]).await else {
+                        phase_error_tag = Some(cbw_packet.tag);
+                        break 'read_ep_loop;
+                    };
+                    // update csw_packet
+                    csw_packet.status = CommandBlockStatus::CommandPassed;
+                    if actual_write_len < request_write_len {
+                        csw_packet.data_residue = (request_write_len - actual_write_len) as u32;
                     }
                 }
 

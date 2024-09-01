@@ -1,3 +1,5 @@
+use byteorder::{BigEndian, ByteOrder, LittleEndian};
+
 /// SCSI command codes
 #[repr(u8)]
 pub enum ScsiCommand {
@@ -12,13 +14,6 @@ pub enum ScsiCommand {
     Read10 = 0x28,
     Write10 = 0x2A,
     Verify10 = 0x2F,
-}
-
-/// SCSI Inquiry command structure
-pub struct RequestSenseCommand {
-    pub operation_code: u8,
-    pub allocation_length: u8,
-    pub control: u8,
 }
 
 /// SCSI Inquiry command structure
@@ -82,7 +77,7 @@ pub enum AdditionalSenseCodeType {
 }
 
 impl AdditionalSenseCodeType {
-    pub fn to_code(&self) -> AdditionalSenseCode {
+    pub fn to_code(self) -> AdditionalSenseCode {
         match self {
             AdditionalSenseCodeType::NoAdditionalSenseInformation => AdditionalSenseCode {
                 asc: 0x00,
@@ -285,24 +280,10 @@ impl RequestSenseData {
         self.additional_sense_code_qualifier = code.ascq;
     }
 
-    pub fn to_data(&self) -> [u8; REQUEST_SENSE_DATA_SIZE] {
-        let mut data = [0u8; REQUEST_SENSE_DATA_SIZE];
-        data[0] = (if self.valid { 0 } else { 0x80 }) | (self.error_code & 0x7f);
-        data[1] = self.segment_number;
-        data[2] = (self.sense_key as u8) & 0xf;
-        data[3..7].copy_from_slice(&self.information.to_be_bytes());
-        data[7] = self.additional_sense_length;
-        data[8..12].copy_from_slice(&self.command_specific_information.to_be_bytes());
-        data[12] = self.additional_sense_code;
-        data[13] = self.additional_sense_code_qualifier;
-        data[14] = self.field_replaceable_unit_code;
-        data[15] = ((self.sksv & 0x1) << 7)
-            | ((self.cd & 0x1) << 6)
-            | ((self.bpv & 0x1) << 5)
-            | (self.bit_pointer & 0x7);
-        data[16..18].copy_from_slice(&self.field_pointer.to_be_bytes());
-        data[18..20].copy_from_slice(&self.reserved.to_be_bytes());
-        data
+    pub fn into_data(self) -> [u8; REQUEST_SENSE_DATA_SIZE] {
+        let mut buf = [0u8; REQUEST_SENSE_DATA_SIZE];
+        self.prepare_to_buf(&mut buf);
+        buf
     }
 
     /// Prepare data to buffer
@@ -312,9 +293,9 @@ impl RequestSenseData {
         buf[0] = (if self.valid { 0 } else { 0x80 }) | (self.error_code & 0x7f);
         buf[1] = self.segment_number;
         buf[2] = (self.sense_key as u8) & 0xf;
-        buf[3..7].copy_from_slice(&self.information.to_be_bytes());
+        BigEndian::write_u32(&mut buf[3..7], self.information);
         buf[7] = self.additional_sense_length;
-        buf[8..12].copy_from_slice(&self.command_specific_information.to_be_bytes());
+        BigEndian::write_u32(&mut buf[8..12], self.command_specific_information);
         buf[12] = self.additional_sense_code;
         buf[13] = self.additional_sense_code_qualifier;
         buf[14] = self.field_replaceable_unit_code;
@@ -322,11 +303,12 @@ impl RequestSenseData {
             | ((self.cd & 0x1) << 6)
             | ((self.bpv & 0x1) << 5)
             | (self.bit_pointer & 0x7);
-        buf[16..18].copy_from_slice(&self.field_pointer.to_be_bytes());
-        buf[18..20].copy_from_slice(&self.reserved.to_be_bytes());
+        BigEndian::write_u16(&mut buf[16..18], self.field_pointer);
+        BigEndian::write_u16(&mut buf[18..20], self.reserved);
     }
 }
 
+/// SCSI Inquiry command structure
 pub const INQUIRY_COMMAND_DATA_SIZE: usize = 36;
 /// SCSI Inquiry command structure
 #[derive(Copy, Clone, PartialEq, Eq, defmt::Format)]
@@ -394,39 +376,16 @@ impl InquiryCommandData {
             linked: 0,
             cmdque: 0,
             vs1: 0,
-            vendor_id: *b"wipeseal",
-            product_id: *b"broccoli-app    ",
+            vendor_id: *b"broccoli",
+            product_id: *b"wipeseals devapp",
             product_revision_level: *b"0001",
         }
     }
 
     pub fn to_data(self) -> [u8; INQUIRY_COMMAND_DATA_SIZE] {
-        let mut data = [0u8; INQUIRY_COMMAND_DATA_SIZE];
-        data[0] = (self.peripheral_qualifier << 5) | (self.peripheral_device_type & 0x1f);
-        data[1] = (self.rmb << 7);
-        data[2] = self.version;
-        data[3] = ((self.aerc & 0x1) << 7)
-            | ((self.normaca & 0x1) << 5)
-            | ((self.hisup & 0x1) << 4)
-            | (self.response_data_format & 0xf);
-        data[4] = self.additional_length;
-        data[5] = (self.sccs << 0x1);
-        data[6] = ((self.bque & 0x1) << 7)
-            | ((self.encserv & 0x1) << 6)
-            | ((self.vs0 & 0x1) << 5)
-            | ((self.multip & 0x1) << 4)
-            | ((self.mchngr & 0x1) << 3)
-            | ((self.addr16 & 0x1) << 1);
-        data[7] = ((self.reladr & 0x1) << 7)
-            | ((self.wbus16 & 0x1) << 6)
-            | ((self.sync & 0x1) << 5)
-            | ((self.linked & 0x1) << 4)
-            | ((self.cmdque & 0x1) << 1)
-            | (self.vs1 & 0x1);
-        data[8..16].copy_from_slice(&self.vendor_id);
-        data[16..32].copy_from_slice(&self.product_id);
-        data[32..36].copy_from_slice(&self.product_revision_level);
-        data
+        let mut buf = [0u8; INQUIRY_COMMAND_DATA_SIZE];
+        self.prepare_to_buf(&mut buf);
+        buf
     }
 
     pub fn prepare_to_buf(&self, buf: &mut [u8]) {
@@ -456,5 +415,47 @@ impl InquiryCommandData {
         buf[8..16].copy_from_slice(&self.vendor_id);
         buf[16..32].copy_from_slice(&self.product_id);
         buf[32..36].copy_from_slice(&self.product_revision_level);
+    }
+}
+
+/// SCSI Read Capacity command structure
+pub const READ_FORMAT_CAPACITIES_DATA_SIZE: usize = 12;
+
+/// SCSI Read Capacity command structure
+#[derive(Copy, Clone, PartialEq, Eq, defmt::Format)]
+pub struct ReadFormatCapacitiesData {
+    pub capacity_list_length: u32,
+    pub num_blocks: u32,
+    pub descriptor_type: u8,
+    pub block_length: u32,
+}
+
+impl ReadFormatCapacitiesData {
+    pub fn new(num_blocks: u32, block_length: u32) -> Self {
+        Self {
+            capacity_list_length: 1,
+            num_blocks,
+            descriptor_type: 2, // formatted media
+            block_length,
+        }
+    }
+
+    pub fn to_data(self) -> [u8; READ_FORMAT_CAPACITIES_DATA_SIZE] {
+        let mut buf = [0u8; READ_FORMAT_CAPACITIES_DATA_SIZE];
+        self.prepare_to_buf(&mut buf);
+        buf
+    }
+
+    pub fn prepare_to_buf(&self, buf: &mut [u8]) {
+        crate::assert!(buf.len() >= READ_FORMAT_CAPACITIES_DATA_SIZE);
+        // CapacityList Header
+        BigEndian::write_u32(&mut buf[0..4], self.capacity_list_length);
+        // Current/Maximum Capacity Descriptor
+        BigEndian::write_u32(&mut buf[4..8], self.num_blocks);
+        buf[8] = self.descriptor_type & 0x3;
+        // Block Length fieldは3byteしかないので、上位1byteはCopyしない
+        let mut block_length = [0u8; 4];
+        BigEndian::write_u32(&mut block_length, self.block_length);
+        buf[9..12].copy_from_slice(&block_length[1..4]);
     }
 }

@@ -22,6 +22,10 @@ use static_cell::StaticCell;
 use crate::usb::msc::{BulkTransferRequest, MscBulkHandler, MscCtrlHandler};
 
 async fn usb_transport_task(driver: Driver<'static, USB>) {
+    let num_blocks = 1024;
+    let block_size = 512;
+    let total_size = num_blocks * block_size;
+
     // Create embassy-usb Config
     let mut config = Config::new(0xc0de, 0xcafe);
     config.manufacturer = Some("wipeseals");
@@ -46,7 +50,7 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
         &mut msos_descriptor,
         &mut control_buf,
     );
-    let mut bulk_handler = MscBulkHandler::new(&channel_ctrl_to_bulk);
+    let mut bulk_handler = MscBulkHandler::new(num_blocks, block_size, &channel_ctrl_to_bulk);
     ctrl_handler.build(&mut builder, config, &mut bulk_handler);
 
     let mut usb = builder.build();
