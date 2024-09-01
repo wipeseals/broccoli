@@ -25,6 +25,8 @@ use static_cell::StaticCell;
 use crate::channel::{LedState, CHANNEL_USB_TO_LEDCTRL};
 use crate::usb::scsi::*;
 
+use super::internal::{InternalTransferRequest, InternalTransferResponse};
+
 // interfaceClass: 0x08 (Mass Storage)
 const MSC_INTERFACE_CLASS: u8 = 0x08;
 // interfaceSubClass: 0x06 (SCSI Primary Commands)
@@ -233,14 +235,14 @@ pub struct MscCtrlHandler<'d> {
     /// Interface Number
     if_num: InterfaceNumber,
     /// Bulk Transfer Request Sender (for Mass Storage Reset)
-    sender: DynamicSender<'d, BulkTransferRequest>,
+    bulk_request_sender: DynamicSender<'d, BulkTransferRequest>,
 }
 
 /// USB Mass Storage Class Bulk Handler
 /// This handler is used to handle the bulk transfers for the Mass Storage Class.
 pub struct MscBulkHandler<'d, D: Driver<'d>> {
     /// Bulk Transfer Request Receiver (for Mass Storage Reset)
-    receiver: DynamicReceiver<'d, BulkTransferRequest>,
+    bulk_request_receiver: DynamicReceiver<'d, BulkTransferRequest>,
     /// Bulk Endpoint Out
     read_ep: Option<<D as Driver<'d>>::EndpointOut>,
     /// Bulk Endpoint In
@@ -256,6 +258,10 @@ pub struct MscBulkHandler<'d, D: Driver<'d>> {
     num_blocks: u32,
     /// block length
     block_size: u32,
+    // /// Request Read/Write to NAND Flash
+    // internal_request_sender: DynamicSender<'d, InternalTransferRequest>,
+    // /// Response Read/Write to NAND Flash
+    // internal_request_receiver: DynamicReceiver<'d, InternalTransferResponse>,
 }
 
 impl<'d> Handler for MscCtrlHandler<'d> {
@@ -278,7 +284,10 @@ impl<'d> Handler for MscCtrlHandler<'d> {
             x if x == ClassSpecificRequest::MassStorageReset as u8 => {
                 // Mass Storage Reset
                 debug!("Mass Storage Reset");
-                match self.sender.try_send(BulkTransferRequest::Reset) {
+                match self
+                    .bulk_request_sender
+                    .try_send(BulkTransferRequest::Reset)
+                {
                     Ok(_) => Some(InResponse::Accepted(&buf[..0])),
                     Err(_) => Some(InResponse::Rejected),
                 }
@@ -298,12 +307,10 @@ impl<'d> Handler for MscCtrlHandler<'d> {
 }
 
 impl<'d> MscCtrlHandler<'d> {
-    pub fn new<const N: usize>(
-        channel: &'d Channel<CriticalSectionRawMutex, BulkTransferRequest, N>,
-    ) -> Self {
+    pub fn new(bulk_request_sender: DynamicSender<'d, BulkTransferRequest>) -> Self {
         Self {
             if_num: InterfaceNumber(0),
-            sender: channel.dyn_sender(),
+            bulk_request_sender,
         }
     }
 
@@ -335,16 +342,16 @@ impl<'d> MscCtrlHandler<'d> {
 }
 
 impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
-    pub fn new<const N: usize>(
+    pub fn new(
         vendor_id: [u8; 8],
         product_id: [u8; 16],
         product_revision_level: [u8; 4],
         num_blocks: u32,
         block_size: u32,
-        channel: &'d Channel<CriticalSectionRawMutex, BulkTransferRequest, N>,
+        bulk_request_receiver: DynamicReceiver<'d, BulkTransferRequest>,
     ) -> Self {
         Self {
-            receiver: channel.dyn_receiver(),
+            bulk_request_receiver,
             read_ep: None,
             write_ep: None,
             vendor_id,
@@ -373,7 +380,7 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
 
             'read_ep_loop: loop {
                 // Check if Mass Storage Reset occurred
-                if (self.receiver.try_receive() == Ok(BulkTransferRequest::Reset)) {
+                if (self.bulk_request_receiver.try_receive() == Ok(BulkTransferRequest::Reset)) {
                     debug!("Mass Storage Reset");
                     phase_error_tag = None;
                     break 'read_ep_loop;

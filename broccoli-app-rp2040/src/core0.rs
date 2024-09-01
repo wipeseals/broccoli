@@ -38,7 +38,7 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
 
     let mut channel_ctrl_to_bulk: Channel<CriticalSectionRawMutex, BulkTransferRequest, 2> =
         Channel::new();
-    let mut ctrl_handler = MscCtrlHandler::new(&channel_ctrl_to_bulk);
+    let mut ctrl_handler = MscCtrlHandler::new(channel_ctrl_to_bulk.dyn_sender());
     let mut builder = Builder::new(
         driver,
         config,
@@ -53,7 +53,7 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
         USB_DEVICE_VERSION,
         USB_NUM_BLOCKS,
         USB_BLOCK_SIZE,
-        &channel_ctrl_to_bulk,
+        channel_ctrl_to_bulk.dyn_receiver(),
     );
     ctrl_handler.build(&mut builder, config, &mut bulk_handler);
 
