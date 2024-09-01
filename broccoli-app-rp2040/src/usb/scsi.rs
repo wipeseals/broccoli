@@ -222,9 +222,9 @@ pub struct RequestSenseData {
     pub additional_sense_code_qualifier: u8,
     pub field_replaceable_unit_code: u8,
 
-    pub sksv: u8,
-    pub cd: u8,
-    pub bpv: u8,
+    pub sksv: bool,
+    pub cd: bool,
+    pub bpv: bool,
     pub bit_pointer: u8,
     pub field_pointer: u16,
     pub reserved: u16,
@@ -243,9 +243,9 @@ impl RequestSenseData {
             additional_sense_code: 0,
             additional_sense_code_qualifier: 0,
             field_replaceable_unit_code: 0,
-            sksv: 0,
-            cd: 0,
-            bpv: 0,
+            sksv: false,
+            cd: false,
+            bpv: false,
             bit_pointer: 0,
             field_pointer: 0,
             reserved: 0,
@@ -265,9 +265,9 @@ impl RequestSenseData {
             additional_sense_code: asc.asc,
             additional_sense_code_qualifier: asc.ascq,
             field_replaceable_unit_code: 0,
-            sksv: 0,
-            cd: 0,
-            bpv: 0,
+            sksv: false,
+            cd: false,
+            bpv: false,
             bit_pointer: 0,
             field_pointer: 0,
             reserved: 0,
@@ -290,7 +290,7 @@ impl RequestSenseData {
     pub fn prepare_to_buf(&self, buf: &mut [u8]) {
         crate::assert!(buf.len() >= REQUEST_SENSE_DATA_SIZE);
 
-        buf[0] = (if self.valid { 0 } else { 0x80 }) | (self.error_code & 0x7f);
+        buf[0] = ((self.valid as u8) << 7) | (self.error_code & 0x7f);
         buf[1] = self.segment_number;
         buf[2] = (self.sense_key as u8) & 0xf;
         BigEndian::write_u32(&mut buf[3..7], self.information);
@@ -299,9 +299,9 @@ impl RequestSenseData {
         buf[12] = self.additional_sense_code;
         buf[13] = self.additional_sense_code_qualifier;
         buf[14] = self.field_replaceable_unit_code;
-        buf[15] = ((self.sksv & 0x1) << 7)
-            | ((self.cd & 0x1) << 6)
-            | ((self.bpv & 0x1) << 5)
+        buf[15] = ((self.sksv as u8) << 7)
+            | ((self.cd as u8) << 6)
+            | ((self.bpv as u8) << 5)
             | (self.bit_pointer & 0x7);
         BigEndian::write_u16(&mut buf[16..18], self.field_pointer);
         BigEndian::write_u16(&mut buf[18..20], self.reserved);
@@ -317,32 +317,32 @@ pub struct InquiryCommandData {
     pub peripheral_qualifier: u8,
     pub peripheral_device_type: u8,
     // byte1
-    pub rmb: u8,
+    pub rmb: bool,
     // byte2
     pub version: u8,
     // byte3
-    pub aerc: u8,
-    pub normaca: u8,
-    pub hisup: u8,
+    pub aerc: bool,
+    pub normaca: bool,
+    pub hisup: bool,
     pub response_data_format: u8,
     // byte4
     pub additional_length: u8,
     // byte5
-    pub sccs: u8,
+    pub sccs: bool,
     // byte6
-    pub bque: u8,
-    pub encserv: u8,
-    pub vs0: u8,
-    pub multip: u8,
-    pub mchngr: u8,
-    pub addr16: u8,
+    pub bque: bool,
+    pub encserv: bool,
+    pub vs0: bool,
+    pub multip: bool,
+    pub mchngr: bool,
+    pub addr16: bool,
     // byte7
-    pub reladr: u8,
-    pub wbus16: u8,
-    pub sync: u8,
-    pub linked: u8,
-    pub cmdque: u8,
-    pub vs1: u8,
+    pub reladr: bool,
+    pub wbus16: bool,
+    pub sync: bool,
+    pub linked: bool,
+    pub cmdque: bool,
+    pub vs1: bool,
     // byte8-15
     pub vendor_id: [u8; 8],
     // byte16-31
@@ -356,26 +356,26 @@ impl InquiryCommandData {
         Self {
             peripheral_qualifier: 0,
             peripheral_device_type: 0,
-            rmb: 0x1,
+            rmb: true,
             version: 0x4,
-            aerc: 0,
-            normaca: 0,
-            hisup: 0,
+            aerc: false,
+            normaca: false,
+            hisup: false,
             response_data_format: 0x2,
             additional_length: 0x1f,
-            sccs: 0,
-            bque: 0,
-            encserv: 0,
-            vs0: 0,
-            multip: 0,
-            mchngr: 0,
-            addr16: 0,
-            reladr: 0,
-            wbus16: 0,
-            sync: 0,
-            linked: 0,
-            cmdque: 0,
-            vs1: 0,
+            sccs: false,
+            bque: false,
+            encserv: false,
+            vs0: false,
+            multip: false,
+            mchngr: false,
+            addr16: false,
+            reladr: false,
+            wbus16: false,
+            sync: false,
+            linked: false,
+            cmdque: false,
+            vs1: false,
             vendor_id,
             product_id,
             product_revision_level,
@@ -392,26 +392,26 @@ impl InquiryCommandData {
         crate::assert!(buf.len() >= INQUIRY_COMMAND_DATA_SIZE);
 
         buf[0] = (self.peripheral_qualifier << 5) | (self.peripheral_device_type & 0x1f);
-        buf[1] = (self.rmb << 7);
+        buf[1] = ((self.rmb as u8) << 7);
         buf[2] = self.version;
-        buf[3] = ((self.aerc & 0x1) << 7)
-            | ((self.normaca & 0x1) << 5)
-            | ((self.hisup & 0x1) << 4)
+        buf[3] = ((self.aerc as u8) << 7)
+            | ((self.normaca as u8) << 5)
+            | ((self.hisup as u8) << 4)
             | (self.response_data_format & 0xf);
         buf[4] = self.additional_length;
-        buf[5] = (self.sccs << 0x1);
-        buf[6] = ((self.bque & 0x1) << 7)
-            | ((self.encserv & 0x1) << 6)
-            | ((self.vs0 & 0x1) << 5)
-            | ((self.multip & 0x1) << 4)
-            | ((self.mchngr & 0x1) << 3)
-            | ((self.addr16 & 0x1) << 1);
-        buf[7] = ((self.reladr & 0x1) << 7)
-            | ((self.wbus16 & 0x1) << 6)
-            | ((self.sync & 0x1) << 5)
-            | ((self.linked & 0x1) << 4)
-            | ((self.cmdque & 0x1) << 1)
-            | (self.vs1 & 0x1);
+        buf[5] = ((self.sccs as u8) << 0x1);
+        buf[6] = ((self.bque as u8) << 7)
+            | ((self.encserv as u8) << 6)
+            | ((self.vs0 as u8) << 5)
+            | ((self.multip as u8) << 4)
+            | ((self.mchngr as u8) << 3)
+            | ((self.addr16 as u8) << 1);
+        buf[7] = ((self.reladr as u8) << 7)
+            | ((self.wbus16 as u8) << 6)
+            | ((self.sync as u8) << 5)
+            | ((self.linked as u8) << 4)
+            | ((self.cmdque as u8) << 1)
+            | (self.vs1 as u8);
         buf[8..16].copy_from_slice(&self.vendor_id);
         buf[16..32].copy_from_slice(&self.product_id);
         buf[32..36].copy_from_slice(&self.product_revision_level);
@@ -525,5 +525,81 @@ impl ModeSense6Data {
         buf[1] = self.medium_type;
         buf[2] = self.device_specific_parameter;
         buf[3] = self.block_descriptor_length;
+    }
+}
+
+/// SCSI Reade 10 command length
+pub const READ_10_DATA_SIZE: usize = 10;
+
+/// SCSI Mode Sense 10 command structure
+#[derive(Copy, Clone, PartialEq, Eq, defmt::Format)]
+pub struct Read10Command {
+    /// byte0: Operation Code (0x28)
+    pub op_code: u8,
+    /// byte1: Read Protect
+    /// TODO: RDPROTECT fieldの表に従って実装
+    pub rdprotect: u8,
+    /// byte1: Disable Page Out
+    /// 0: Page Out is enabled, 1: Page Out is disabled (Data is not cached)
+    pub dpo: bool,
+    /// byte1: FUA (Force Unit Access)
+    /// 0: Normal, 1: FUA (Data is forced to be written to the medium)
+    pub fua: bool,
+    /// byte1: Read After Read Capable
+    /// 0: Normal, 1: Read After Read Capable (Data is read after the read command)
+    pub rarc: bool,
+    /// byte2-5: Logical Block Address
+    pub lba: u32,
+    /// byte6: Group Number
+    pub group_number: u8,
+    /// byte7-8: Transfer Length
+    pub transfer_length: u16,
+    /// byte9: Normal ACA
+    /// 0: Normal, 1: Normal ACA (ACA is enabled)
+    pub naca: bool,
+    /// byte9: Link
+    /// 0: Normal, 1: Link (The command is linked)
+    pub link: bool,
+    /// byte9: Flag
+    /// 0: Normal, 1: Flag (The command is flagged)
+    pub flag: bool,
+    /// byte9: Vendor Specific
+    pub vendor_specific: u8,
+}
+
+impl Read10Command {
+    pub fn new(lba: u32, transfer_length: u16) -> Self {
+        Self {
+            op_code: 0x28,
+            rdprotect: 0,
+            dpo: false,
+            fua: false,
+            rarc: false,
+            lba,
+            group_number: 0,
+            transfer_length,
+            naca: false,
+            link: false,
+            flag: false,
+            vendor_specific: 0,
+        }
+    }
+
+    pub fn from_data(data: &[u8]) -> Self {
+        crate::assert!(data.len() >= READ_10_DATA_SIZE);
+        Self {
+            op_code: data[0],
+            rdprotect: (data[1] >> 5) & 0x7,
+            dpo: (data[1] & 0x10) != 0,
+            fua: (data[1] & 0x08) != 0,
+            rarc: (data[1] & 0x04) != 0,
+            lba: BigEndian::read_u32(&data[2..6]),
+            group_number: data[6] & 0x1f,
+            transfer_length: BigEndian::read_u16(&data[7..9]),
+            naca: (data[9] & 0x80) != 0,
+            link: (data[9] & 0x40) != 0,
+            flag: (data[9] & 0x20) != 0,
+            vendor_specific: data[9] & 0x1f,
+        }
     }
 }

@@ -23,6 +23,9 @@ use export::debug;
 use static_cell::StaticCell;
 
 use crate::channel::{LedState, CHANNEL_USB_TO_LEDCTRL};
+use crate::usb::internal::{
+    DataBufferIdentify, InternalTransferRequestId, InternalTransferResponseStatus,
+};
 use crate::usb::scsi::*;
 
 use super::internal::{InternalTransferRequest, InternalTransferResponse};
@@ -238,6 +241,15 @@ pub struct MscCtrlHandler<'d> {
     bulk_request_sender: DynamicSender<'d, BulkTransferRequest>,
 }
 
+/// USB Mass Storage Class Bulk Handler Configuration
+pub struct MscBulkHandlerConfig {
+    pub vendor_id: [u8; 8],
+    pub product_id: [u8; 16],
+    pub product_revision_level: [u8; 4],
+    pub num_blocks: u32,
+    pub block_size: u32,
+}
+
 /// USB Mass Storage Class Bulk Handler
 /// This handler is used to handle the bulk transfers for the Mass Storage Class.
 pub struct MscBulkHandler<'d, D: Driver<'d>> {
@@ -248,20 +260,13 @@ pub struct MscBulkHandler<'d, D: Driver<'d>> {
     /// Bulk Endpoint In
     write_ep: Option<<D as Driver<'d>>::EndpointIn>,
 
-    /// Vendor ID
-    vendor_id: [u8; 8],
-    /// Product ID
-    product_id: [u8; 16],
-    /// Product Revision Level
-    product_revision_level: [u8; 4],
-    /// num of blocks
-    num_blocks: u32,
-    /// block length
-    block_size: u32,
-    // /// Request Read/Write to NAND Flash
-    // internal_request_sender: DynamicSender<'d, InternalTransferRequest>,
-    // /// Response Read/Write to NAND Flash
-    // internal_request_receiver: DynamicReceiver<'d, InternalTransferResponse>,
+    /// Config
+    config: MscBulkHandlerConfig,
+
+    /// Request Read/Write to NAND Flash
+    internal_request_sender: DynamicSender<'d, InternalTransferRequest>,
+    /// Response Read/Write to NAND Flash
+    internal_request_receiver: DynamicReceiver<'d, InternalTransferResponse>,
 }
 
 impl<'d> Handler for MscCtrlHandler<'d> {
@@ -341,19 +346,15 @@ impl<'d> MscCtrlHandler<'d> {
     }
 }
 
-impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
+impl MscBulkHandlerConfig {
     pub fn new(
         vendor_id: [u8; 8],
         product_id: [u8; 16],
         product_revision_level: [u8; 4],
         num_blocks: u32,
         block_size: u32,
-        bulk_request_receiver: DynamicReceiver<'d, BulkTransferRequest>,
     ) -> Self {
         Self {
-            bulk_request_receiver,
-            read_ep: None,
-            write_ep: None,
             vendor_id,
             product_id,
             product_revision_level,
@@ -361,8 +362,27 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
             block_size,
         }
     }
+}
+
+impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
+    pub fn new(
+        config: MscBulkHandlerConfig,
+        bulk_request_receiver: DynamicReceiver<'d, BulkTransferRequest>,
+        internal_request_sender: DynamicSender<'d, InternalTransferRequest>,
+        internal_request_receiver: DynamicReceiver<'d, InternalTransferResponse>,
+    ) -> Self {
+        Self {
+            read_ep: None,
+            write_ep: None,
+            config,
+            bulk_request_receiver,
+            internal_request_sender,
+            internal_request_receiver,
+        }
+    }
 
     /// Main loop for bulk-only transport
+    /// TODO: 関数肥大化しているので、分割する
     pub async fn run(&mut self) -> ! {
         crate::assert!(self.read_ep.is_some());
         crate::assert!(self.write_ep.is_some());
@@ -442,9 +462,9 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                         // Inquiry data. resp fixed data
                         actual_write_len = INQUIRY_COMMAND_DATA_SIZE;
                         let inquiry_data = InquiryCommandData::new(
-                            self.vendor_id,
-                            self.product_id,
-                            self.product_revision_level,
+                            self.config.vendor_id,
+                            self.config.product_id,
+                            self.config.product_revision_level,
                         );
                         inquiry_data.prepare_to_buf(&mut write_buf[0..actual_write_len]);
                     }
@@ -452,8 +472,10 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                         debug!("Read Format Capacities");
                         // Read Format Capacities data. resp fixed data
                         actual_write_len = READ_FORMAT_CAPACITIES_DATA_SIZE;
-                        let read_format_capacities_data =
-                            ReadFormatCapacitiesData::new(self.num_blocks, self.block_size);
+                        let read_format_capacities_data = ReadFormatCapacitiesData::new(
+                            self.config.num_blocks,
+                            self.config.block_size,
+                        );
                         read_format_capacities_data
                             .prepare_to_buf(&mut write_buf[0..actual_write_len]);
                     }
@@ -462,7 +484,7 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                         // Read Capacity data. resp fixed data
                         actual_write_len = READ_CAPACITY_16_DATA_SIZE;
                         let read_capacity_data =
-                            ReadCapacityData::new(self.num_blocks, self.block_size);
+                            ReadCapacityData::new(self.config.num_blocks, self.config.block_size);
                         read_capacity_data.prepare_to_buf(&mut write_buf[0..actual_write_len]);
                     }
                     x if x == ScsiCommand::ModeSense6 as u8 => {
@@ -487,6 +509,51 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                             .prepare_to_buf(&mut write_buf[0..actual_write_len]);
                         latest_sense_data = None;
                     }
+                    // x if x == ScsiCommand::Read10 as u8 => {
+                    //     debug!("Read 10");
+                    //     if cbw_packet.command_length < READ_10_DATA_SIZE as u8 {
+                    //         error!("Invalid Read 10 Command Length: {:#x}", cbw_packet);
+                    //         latest_sense_data = Some(RequestSenseData::from(
+                    //             SenseKey::IllegalRequest,
+                    //             AdditionalSenseCodeType::IllegalRequestParameterLengthError,
+                    //         ));
+                    //         csw_packet.status = CommandBlockStatus::CommandFailed;
+                    //     } else {
+                    //         // Parse Cmd
+                    //         let cmd = Read10Command::from_data(scsi_commands);
+                    //         let lba = cmd.lba;
+                    //         let transfer_len = cmd.transfer_length;
+                    //         // TODO: Read Request積むのと、Read Response待つのを同時にやる
+                    //         for transfer_count in 0..transfer_len {
+                    //             // TODO: Buffer管理機構からBufferを借用して、ここでは使わない
+                    //             let mut read_data = [0u8; 512];
+                    //             self.internal_request_sender
+                    //                 .send(InternalTransferRequest::new(
+                    //                     InternalTransferRequestId::Read,
+                    //                     cbw_packet.tag,
+                    //                     Some(DataBufferIdentify { tag: 0 }),
+                    //                 ))
+                    //                 .await;
+                    //             let response = self.internal_request_receiver.receive().await;
+                    //             // Check response
+                    //             if response.resp_status != InternalTransferResponseStatus::Success {
+                    //                 error!("Read Error: {:?}", response);
+                    //                 latest_sense_data = Some(RequestSenseData::from(
+                    //                     SenseKey::HardwareError,
+                    //                     AdditionalSenseCodeType::HardwareErrorGeneral,
+                    //                 ));
+                    //                 csw_packet.status = CommandBlockStatus::CommandFailed;
+                    //                 break;
+                    //             }
+                    //             // TODO: Copy data
+                    //             // Hostにデータを書き込む
+                    //             let Ok(_) = write_ep.write(&read_data).await else {
+                    //                 phase_error_tag = Some(cbw_packet.tag);
+                    //                 break 'read_ep_loop;
+                    //             };
+                    //         }
+                    //     }
+                    // }
                     _ => {
                         error!("Unsupported Command: {:#x}", scsi_command);
                         // save latest sense data

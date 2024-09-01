@@ -20,8 +20,78 @@ use export::debug;
 use static_cell::StaticCell;
 
 use crate::config::*;
-use crate::usb::msc::{BulkTransferRequest, MscBulkHandler, MscCtrlHandler};
+use crate::usb::internal::{
+    InternalTransferErrorCode, InternalTransferRequest, InternalTransferRequestId,
+    InternalTransferResponse, InternalTransferResponseStatus,
+};
+use crate::usb::msc::{BulkTransferRequest, MscBulkHandler, MscBulkHandlerConfig, MscCtrlHandler};
 
+/// Bulk Transfer -> Internal Request Channel
+static CHANNEL_BULK_TO_INTERNAL: Channel<
+    CriticalSectionRawMutex,
+    InternalTransferRequest,
+    CHANNEL_BULK_TO_INTERNAL_N,
+> = Channel::new();
+
+/// Internal Request -> Bulk Transfer Channel
+static CHANNEL_INTERNAL_TO_BULK: Channel<
+    CriticalSectionRawMutex,
+    InternalTransferResponse,
+    CHANNEL_INTERNAL_TO_BULK_N,
+> = Channel::new();
+
+/// USB Bulk Transfer to Internal Request Channel
+async fn internal_request_task() {
+    loop {
+        let request = CHANNEL_BULK_TO_INTERNAL.receive().await;
+        match request.req_id {
+            InternalTransferRequestId::Echo => {
+                let response = InternalTransferResponse {
+                    req_id: InternalTransferRequestId::Echo,
+                    requester_tag: request.requester_tag,
+                    data_buf_id: request.data_buf_id,
+                    resp_status: InternalTransferResponseStatus::Success,
+                };
+                CHANNEL_INTERNAL_TO_BULK.send(response).await;
+            }
+            InternalTransferRequestId::Read => {
+                let response = InternalTransferResponse {
+                    req_id: InternalTransferRequestId::Read,
+                    requester_tag: request.requester_tag,
+                    data_buf_id: request.data_buf_id,
+                    resp_status: InternalTransferResponseStatus::Error {
+                        code: InternalTransferErrorCode::NotImplemented,
+                    },
+                };
+                CHANNEL_INTERNAL_TO_BULK.send(response).await;
+            }
+            InternalTransferRequestId::Write => {
+                let response = InternalTransferResponse {
+                    req_id: InternalTransferRequestId::Write,
+                    requester_tag: request.requester_tag,
+                    data_buf_id: request.data_buf_id,
+                    resp_status: InternalTransferResponseStatus::Error {
+                        code: InternalTransferErrorCode::NotImplemented,
+                    },
+                };
+                CHANNEL_INTERNAL_TO_BULK.send(response).await;
+            }
+            InternalTransferRequestId::Flush => {
+                let response = InternalTransferResponse {
+                    req_id: InternalTransferRequestId::Flush,
+                    requester_tag: request.requester_tag,
+                    data_buf_id: request.data_buf_id,
+                    resp_status: InternalTransferResponseStatus::Error {
+                        code: InternalTransferErrorCode::NotImplemented,
+                    },
+                };
+                CHANNEL_INTERNAL_TO_BULK.send(response).await;
+            }
+        }
+    }
+}
+
+/// USB Control Transfer and Bulk Transfer Channel
 async fn usb_transport_task(driver: Driver<'static, USB>) {
     // Create embassy-usb Config
     let mut config = Config::new(USB_VID, USB_PID);
@@ -36,8 +106,12 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
     let mut msos_descriptor = [0; 256];
     let mut control_buf = [0; 64];
 
-    let mut channel_ctrl_to_bulk: Channel<CriticalSectionRawMutex, BulkTransferRequest, 2> =
-        Channel::new();
+    // Control Transfer -> Bulk Transfer Channel
+    let mut channel_ctrl_to_bulk: Channel<
+        CriticalSectionRawMutex,
+        BulkTransferRequest,
+        CHANNEL_CTRL_TO_BULK_N,
+    > = Channel::new();
     let mut ctrl_handler = MscCtrlHandler::new(channel_ctrl_to_bulk.dyn_sender());
     let mut builder = Builder::new(
         driver,
@@ -48,12 +122,16 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
         &mut control_buf,
     );
     let mut bulk_handler = MscBulkHandler::new(
-        USB_VENDOR_ID,
-        USB_PRODUCT_ID,
-        USB_DEVICE_VERSION,
-        USB_NUM_BLOCKS,
-        USB_BLOCK_SIZE,
+        MscBulkHandlerConfig::new(
+            USB_VENDOR_ID,
+            USB_PRODUCT_ID,
+            USB_PRODUCT_DEVICE_VERSION,
+            USB_NUM_BLOCKS,
+            USB_BLOCK_SIZE,
+        ),
         channel_ctrl_to_bulk.dyn_receiver(),
+        CHANNEL_BULK_TO_INTERNAL.dyn_sender(),
+        CHANNEL_INTERNAL_TO_BULK.dyn_receiver(),
     );
     ctrl_handler.build(&mut builder, config, &mut bulk_handler);
 
@@ -67,5 +145,7 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
 
 #[embassy_executor::task]
 pub async fn core0_main(driver: Driver<'static, USB>) {
-    usb_transport_task(driver).await;
+    let usb_transport_fut = usb_transport_task(driver);
+    let internal_request_fut = internal_request_task();
+    join(usb_transport_fut, internal_request_fut).await;
 }

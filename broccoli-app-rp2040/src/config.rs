@@ -17,10 +17,18 @@ pub const USB_VENDOR_ID: [u8; 8] = *b"broccoli";
 /// USB device product ID as a byte array
 pub const USB_PRODUCT_ID: [u8; 16] = *b"wipeseals devapp";
 /// USB device version as a byte array
-pub const USB_DEVICE_VERSION: [u8; 4] = *b"0001";
+pub const USB_PRODUCT_DEVICE_VERSION: [u8; 4] = *b"0001";
 /// USB device number of blocks
 pub const USB_NUM_BLOCKS: u32 = 1024;
 /// USB device block size
 pub const USB_BLOCK_SIZE: u32 = 512;
 /// USB device total size
 pub const USB_TOTAL_SIZE: u32 = USB_NUM_BLOCKS * USB_BLOCK_SIZE;
+/// LEDCTRL channel channel size
+pub const CHANNEL_USB_TO_LEDCTRL_N: usize = 1;
+/// USB Control Transfer to Bulk Transfer channel size
+pub const CHANNEL_CTRL_TO_BULK_N: usize = 2;
+/// USB Bulk Transfer to Internal Request channel size
+pub const CHANNEL_BULK_TO_INTERNAL_N: usize = 4;
+/// USB Internal Request to Bulk Transfer channel size
+pub const CHANNEL_INTERNAL_TO_BULK_N: usize = 4;
