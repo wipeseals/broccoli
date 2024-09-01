@@ -23,9 +23,7 @@ use export::debug;
 use static_cell::StaticCell;
 
 use crate::channel::{LedState, CHANNEL_USB_TO_LEDCTRL};
-use crate::usb::scsi::{
-    AdditionalSenseCodeType, RequestSenseData, ScsiCommand, SenseKey, REQUEST_SENSE_DATA_SIZE,
-};
+use crate::usb::scsi::*;
 
 // interfaceClass: 0x08 (Mass Storage)
 const MSC_INTERFACE_CLASS: u8 = 0x08;
@@ -409,6 +407,23 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                         debug!("Test Unit Ready");
                         // カードの抜き差しなどはないので問題無しで応答
                         csw_packet.status = CommandBlockStatus::CommandPassed;
+                    }
+                    x if x == ScsiCommand::Inquiry as u8 => {
+                        debug!("Inquiry");
+                        // Inquiry data. resp fixed data
+                        let inquiry_data = InquiryCommandData::new();
+                        debug!("Write Data: {:#x}", inquiry_data);
+                        inquiry_data.prepare_to_buf(&mut write_buf[0..INQUIRY_COMMAND_DATA_SIZE]);
+                        let Ok(_) = write_ep.write(&write_buf[0..write_len]).await else {
+                            phase_error_tag = Some(cbw_packet.tag);
+                            break 'read_ep_loop;
+                        };
+                        csw_packet.status = CommandBlockStatus::CommandPassed;
+                        // 36byte + reserved 2byte のため、transfer_lengthと合わない場合の報告
+                        if write_len > INQUIRY_COMMAND_DATA_SIZE {
+                            csw_packet.data_residue =
+                                (write_len - INQUIRY_COMMAND_DATA_SIZE) as u32;
+                        }
                     }
                     x if x == ScsiCommand::RequestSense as u8 => {
                         debug!("Request Sense");
