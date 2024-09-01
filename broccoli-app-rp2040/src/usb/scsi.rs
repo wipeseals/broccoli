@@ -10,7 +10,7 @@ pub enum ScsiCommand {
     StartStopUnit = 0x1B,
     PreventAllowMediumRemoval = 0x1E,
     ReadFormatCapacities = 0x23,
-    ReadCapacity16_10 = 0x25,
+    ReadCapacity = 0x25,
     Read10 = 0x28,
     Write10 = 0x2A,
     Verify10 = 0x2F,
@@ -461,7 +461,7 @@ impl ReadFormatCapacitiesData {
 }
 
 /// SCSI Read Capacity command length
-pub const READ_CAPACITY_DATA_SIZE: usize = 8;
+pub const READ_CAPACITY_16_DATA_SIZE: usize = 8;
 
 /// SCSI Read Capacity command structure
 #[derive(Copy, Clone, PartialEq, Eq, defmt::Format)]
@@ -478,15 +478,52 @@ impl ReadCapacityData {
         }
     }
 
-    pub fn to_data(self) -> [u8; READ_CAPACITY_DATA_SIZE] {
-        let mut buf = [0u8; READ_CAPACITY_DATA_SIZE];
+    pub fn to_data(self) -> [u8; READ_CAPACITY_16_DATA_SIZE] {
+        let mut buf = [0u8; READ_CAPACITY_16_DATA_SIZE];
         self.prepare_to_buf(&mut buf);
         buf
     }
 
     pub fn prepare_to_buf(&self, buf: &mut [u8]) {
-        crate::assert!(buf.len() >= READ_CAPACITY_DATA_SIZE);
+        crate::assert!(buf.len() >= READ_CAPACITY_16_DATA_SIZE);
         BigEndian::write_u32(&mut buf[0..4], self.last_lba);
         BigEndian::write_u32(&mut buf[4..8], self.block_length);
+    }
+}
+
+/// SCSI Mode Sense 6 command length
+pub const MODE_SENSE_6_DATA_SIZE: usize = 4;
+
+/// SCSI Mode Sense 6 command structure
+#[derive(Copy, Clone, PartialEq, Eq, defmt::Format)]
+pub struct ModeSense6Data {
+    pub mode_data_length: u8,
+    pub medium_type: u8,
+    pub device_specific_parameter: u8,
+    pub block_descriptor_length: u8,
+}
+
+impl ModeSense6Data {
+    pub fn new() -> Self {
+        Self {
+            mode_data_length: 0x03,
+            medium_type: 0,
+            device_specific_parameter: 0,
+            block_descriptor_length: 0,
+        }
+    }
+
+    pub fn to_data(self) -> [u8; MODE_SENSE_6_DATA_SIZE] {
+        let mut buf = [0u8; MODE_SENSE_6_DATA_SIZE];
+        self.prepare_to_buf(&mut buf);
+        buf
+    }
+
+    pub fn prepare_to_buf(&self, buf: &mut [u8]) {
+        crate::assert!(buf.len() >= MODE_SENSE_6_DATA_SIZE);
+        buf[0] = self.mode_data_length;
+        buf[1] = self.medium_type;
+        buf[2] = self.device_specific_parameter;
+        buf[3] = self.block_descriptor_length;
     }
 }
