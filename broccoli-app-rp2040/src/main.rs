@@ -6,6 +6,7 @@ mod channel;
 mod config;
 mod core0;
 mod core1;
+mod ftl;
 mod usb;
 
 use core0::core0_main;
