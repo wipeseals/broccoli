@@ -22,9 +22,9 @@ use embassy_usb::{Builder, Config, Handler};
 use export::debug;
 use static_cell::StaticCell;
 
-use crate::channel::{LedState, CHANNEL_USB_TO_LEDCTRL};
 use crate::ftl::buffer::{BufferIdentify, BufferStatus};
 use crate::ftl::interface::{FtlReq, FtlReqId, FtlResp, FtlRespStatus};
+use crate::resouce::{LedState, CHANNEL_USB_TO_LEDCTRL};
 use crate::usb::scsi::*;
 
 // interfaceClass: 0x08 (Mass Storage)

@@ -2,7 +2,7 @@ use defmt::*;
 use embassy_futures::join::join;
 use embassy_rp::gpio::{Level, Output};
 
-use crate::channel::{LedState, CHANNEL_USB_TO_LEDCTRL};
+use crate::resouce::{LedState, CHANNEL_USB_TO_LEDCTRL};
 
 async fn led_task(mut led: Output<'static>) -> ! {
     loop {

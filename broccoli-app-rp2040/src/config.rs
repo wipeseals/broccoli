@@ -32,3 +32,18 @@ pub const CHANNEL_CTRL_TO_BULK_N: usize = 2;
 pub const CHANNEL_BULK_TO_INTERNAL_N: usize = 4;
 /// USB Internal Request to Bulk Transfer channel size
 pub const CHANNEL_INTERNAL_TO_BULK_N: usize = 4;
+/// USB block size
+pub const LOGICAL_BLOCK_SIZE: usize = USB_BLOCK_SIZE as usize;
+/// USB block buffer count
+pub const LOGICAL_BLOCK_BUFFER_N: usize = 8;
+/// NAND page size usable
+/// TODO: broccoli-coreの値を参照して決定する。これ以外のパラメータ含む
+pub const NAND_PAGE_SIZE_USABLE: u32 = 2048;
+/// NAND page size metadata
+pub const NAND_PAGE_SIZE_METADATA: u32 = 128;
+/// NAND page size total (usable + metadata)
+pub const NAND_PAGE_SIZE_TOTAL: u32 = NAND_PAGE_SIZE_USABLE + NAND_PAGE_SIZE_METADATA;
+/// NAND page buffer size
+pub const NAND_PAGE_BUFFER_SIZE: usize = NAND_PAGE_SIZE_TOTAL as usize;
+/// NAND page buffer count
+pub const NAND_PAGE_BUFFER_N: usize = 4;

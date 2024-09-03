@@ -1,5 +1,15 @@
 #![feature(generic_const_exprs)]
 
+use core::{
+    borrow::{Borrow, BorrowMut},
+    cell::RefCell,
+};
+
+use embassy_sync::{
+    blocking_mutex::{raw::CriticalSectionRawMutex, CriticalSectionMutex},
+    mutex::{Mutex, MutexGuard},
+};
+
 /// General Data Buffer
 #[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
 pub struct BufferIdentify {
@@ -16,16 +26,12 @@ pub enum BufferStatus {
 }
 
 /// Shared fixed-size buffer manager
-#[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
-pub struct SharedBufferManager<const TOTAL_BUFFER_SIZE: usize, const BUFFER_N: usize> {
+#[derive(defmt::Format)]
+pub struct SharedBufferManager<const BUFFER_SIZE: usize, const BUFFER_N: usize> {
     /// Shared buffer
-    pub work_buf: [u8; TOTAL_BUFFER_SIZE],
+    pub buffers: [Mutex<CriticalSectionRawMutex, [u8; BUFFER_SIZE]>; BUFFER_N],
     /// Buffer status
-    pub buf_status: [BufferStatus; BUFFER_N],
-    /// Buffer size
-    pub buffer_size: usize,
-    /// Free buffer count
-    pub free_count: usize,
+    pub buf_status: [Mutex<CriticalSectionRawMutex, [BufferStatus; BUFFER_SIZE]>; BUFFER_N],
 }
 
 impl BufferIdentify {
@@ -46,110 +52,62 @@ impl BufferStatus {
     }
 }
 
-impl<const TOTAL_BUFFER_SIZE: usize, const BUFFER_N: usize>
-    SharedBufferManager<TOTAL_BUFFER_SIZE, BUFFER_N>
-{
+impl<const BUFFER_SIZE: usize, const BUFFER_N: usize> SharedBufferManager<BUFFER_SIZE, BUFFER_N> {
     pub fn new() -> Self {
         Self {
-            work_buf: [0; TOTAL_BUFFER_SIZE],
-            buf_status: [BufferStatus::Free; BUFFER_N],
-            buffer_size: TOTAL_BUFFER_SIZE / BUFFER_N,
-            free_count: BUFFER_N,
+            buffers: [const { Mutex::new([0; BUFFER_SIZE]) }; BUFFER_N],
+            buf_status: [const { Mutex::new([BufferStatus::Free; BUFFER_SIZE]) }; BUFFER_N],
         }
-    }
-
-    /// Get buffer status
-    pub fn buf_status(&self, id: BufferIdentify) -> BufferStatus {
-        crate::assert!(id.id < BUFFER_N as u32);
-        self.buf_status[id.id as usize]
     }
 
     /// Get buffer size
     pub fn buf_size(&self) -> usize {
-        self.buffer_size
-    }
-
-    /// Get free buffer count
-    pub fn free_count(&self) -> usize {
-        self.free_count
-    }
-
-    /// allocatable
-    pub fn allocatable(&self) -> bool {
-        self.free_count > 0
+        BUFFER_SIZE
     }
 
     /// Allocate buffer
-    pub fn allocate(&mut self, user_tag: u32) -> Option<BufferIdentify> {
-        if !self.allocatable() {
-            return None;
-        }
-
+    pub async fn allocate(&mut self, user_tag: u32) -> Option<BufferIdentify> {
         for i in 0..BUFFER_N {
-            match self.buf_status[i] {
-                BufferStatus::Free => {
-                    self.buf_status[i] = BufferStatus::InUse { user_tag };
-                    self.free_count -= 1;
-                    return Some(BufferIdentify::new(i as u32));
-                }
-                _ => {}
+            // lock status
+            let mut status = self.buf_status[i].lock().await;
+            // check if free
+            if status.borrow()[0] != BufferStatus::Free {
+                continue;
             }
+            // set in use
+            status.borrow_mut()[0] = BufferStatus::InUse { user_tag };
+            return Some(BufferIdentify::new(i as u32));
         }
-        crate::unreachable!("allocate failed");
+        crate::warn!("allocate failed");
         None
     }
 
     /// Free buffer
-    pub fn free(&mut self, id: BufferIdentify) {
+    pub async fn free(&mut self, id: BufferIdentify) {
         crate::assert!(id.id < BUFFER_N as u32);
-        // SAFETY: id is valid
-        if !matches!(self.buf_status[id.id as usize], BufferStatus::InUse { .. }) {
-            crate::unreachable!("free failed");
-            return;
-        }
 
-        self.buf_status[id.id as usize] = BufferStatus::Free;
-        self.free_count += 1;
+        // lock status
+        let mut status = self.buf_status[id.id as usize].lock().await;
+        // check if in use
+        if !matches!(status.borrow()[0], BufferStatus::InUse { .. }) {
+            crate::warn!("free failed");
+        }
+        // set free
+        status.borrow_mut()[0] = BufferStatus::Free;
     }
 
     /// Get buffer body (mutable)
-    pub fn buf_slice_mut(&mut self, id: BufferIdentify) -> Option<&mut [u8]> {
+    pub async fn get_buf(
+        &mut self,
+        id: BufferIdentify,
+    ) -> MutexGuard<'_, CriticalSectionRawMutex, [u8; BUFFER_SIZE]> {
         crate::assert!(id.id < BUFFER_N as u32);
         // SAFETY: id is valid
-        if !matches!(self.buf_status[id.id as usize], BufferStatus::InUse { .. }) {
-            crate::unreachable!("buf_slice failed");
-            return None;
+        let mut status = self.buf_status[id.id as usize].lock().await;
+        if !matches!(status.borrow()[0], BufferStatus::InUse { .. }) {
+            crate::unreachable!("free failed");
         }
 
-        let start_addr = id.id as usize * TOTAL_BUFFER_SIZE / BUFFER_N;
-        let end_addr = (id.id as usize + 1) * TOTAL_BUFFER_SIZE / BUFFER_N;
-        Some(&mut self.work_buf[start_addr..end_addr])
-    }
-
-    /// Get buffer body (immutable)
-    pub fn buf_slice(&self, id: BufferIdentify) -> Option<&[u8]> {
-        crate::assert!(id.id < BUFFER_N as u32);
-        // SAFETY: id is valid
-        if !matches!(self.buf_status[id.id as usize], BufferStatus::InUse { .. }) {
-            crate::unreachable!("buf_slice failed");
-            return None;
-        }
-
-        let start_addr = id.id as usize * TOTAL_BUFFER_SIZE / BUFFER_N;
-        let end_addr = (id.id as usize + 1) * TOTAL_BUFFER_SIZE / BUFFER_N;
-        Some(&self.work_buf[start_addr..end_addr])
-    }
-
-    /// Get buffer body (pointer, mutable)
-    pub fn buf_ptr_mut(&mut self, id: BufferIdentify) -> Option<*mut u8> {
-        crate::assert!(id.id < BUFFER_N as u32);
-        // SAFETY: id is valid
-        if !matches!(self.buf_status[id.id as usize], BufferStatus::InUse { .. }) {
-            crate::unreachable!("buf_ptr failed");
-            return None;
-        }
-
-        let start_addr = id.id as usize * TOTAL_BUFFER_SIZE / BUFFER_N;
-        Some(&mut self.work_buf[start_addr] as *mut u8)
+        self.buffers[id.id as usize].lock().await
     }
 }
