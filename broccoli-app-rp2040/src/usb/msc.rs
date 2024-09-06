@@ -23,7 +23,7 @@ use export::debug;
 use static_cell::StaticCell;
 
 use crate::ftl::buffer::{BufferIdentify, BufferStatus};
-use crate::ftl::interface::{FtlReq, FtlReqId, FtlResp, FtlRespStatus};
+use crate::ftl::interface::{DataRequest, DataRequestId, DataResponse, DataResponseStatus};
 use crate::resouce::{LedState, CHANNEL_USB_TO_LEDCTRL};
 use crate::usb::scsi::*;
 
@@ -261,9 +261,9 @@ pub struct MscBulkHandler<'d, D: Driver<'d>> {
     config: MscBulkHandlerConfig,
 
     /// Request Read/Write to NAND Flash
-    internal_request_sender: DynamicSender<'d, FtlReq>,
+    internal_request_sender: DynamicSender<'d, DataRequest>,
     /// Response Read/Write to NAND Flash
-    internal_request_receiver: DynamicReceiver<'d, FtlResp>,
+    internal_request_receiver: DynamicReceiver<'d, DataResponse>,
 }
 
 impl<'d> Handler for MscCtrlHandler<'d> {
@@ -365,8 +365,8 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
     pub fn new(
         config: MscBulkHandlerConfig,
         bulk_request_receiver: DynamicReceiver<'d, BulkTransferRequest>,
-        internal_request_sender: DynamicSender<'d, FtlReq>,
-        internal_request_receiver: DynamicReceiver<'d, FtlResp>,
+        internal_request_sender: DynamicSender<'d, DataRequest>,
+        internal_request_receiver: DynamicReceiver<'d, DataResponse>,
     ) -> Self {
         Self {
             read_ep: None,

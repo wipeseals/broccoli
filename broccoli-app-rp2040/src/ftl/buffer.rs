@@ -5,6 +5,7 @@ use core::{
     cell::RefCell,
 };
 
+use cortex_m::interrupt::free;
 use embassy_sync::{
     blocking_mutex::{raw::CriticalSectionRawMutex, CriticalSectionMutex},
     mutex::{Mutex, MutexGuard},
@@ -12,53 +13,70 @@ use embassy_sync::{
 
 /// General Data Buffer
 #[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
-pub struct BufferIdentify {
+pub struct BufferIdentify<AlocTag: Copy + Clone + Eq + PartialEq, const BUFFER_SIZE: usize> {
     pub buf_index: u32,
+    pub alloc_tag: AlocTag,
 }
 
 /// Buffer status
 #[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
-pub enum BufferStatus {
+pub enum BufferStatus<AllocTag: Copy + Clone + Eq + PartialEq + Eq + PartialEq> {
     /// not used
     Free,
     /// in use
-    InUse { user_tag: u32 },
+    Busy { alloc_tag: AllocTag },
 }
 
 /// Shared fixed-size buffer manager
 #[derive(defmt::Format)]
-pub struct SharedBufferManager<const BUFFER_SIZE: usize, const BUFFER_N: usize> {
+pub struct SharedBufferManager<
+    AllocTag: Copy + Clone + Eq + PartialEq,
+    const BUFFER_SIZE: usize,
+    const BUFFER_N: usize,
+> {
     /// Shared buffer
     pub buffers: [Mutex<CriticalSectionRawMutex, [u8; BUFFER_SIZE]>; BUFFER_N],
     /// Buffer status
-    pub statuses: [Mutex<CriticalSectionRawMutex, [BufferStatus; BUFFER_SIZE]>; BUFFER_N],
+    pub statuses: [Mutex<CriticalSectionRawMutex, [BufferStatus<AllocTag>; BUFFER_SIZE]>; BUFFER_N],
 }
 
-impl BufferIdentify {
-    pub fn new(buf_index: u32) -> Self {
-        Self { buf_index }
+impl<Alloctag: Copy + Clone + Eq + PartialEq, const BUFFER_SIZE: usize>
+    BufferIdentify<Alloctag, BUFFER_SIZE>
+{
+    pub fn new(buf_index: u32, alloc_tag: Alloctag) -> Self {
+        Self {
+            buf_index,
+            alloc_tag,
+        }
     }
 }
 
-impl BufferStatus {
+impl<AllocTag: Copy + Clone + Eq + PartialEq> BufferStatus<AllocTag> {
     pub fn free() -> Self {
         Self::Free
     }
-    pub fn in_use(user_tag: u32) -> Self {
-        Self::InUse { user_tag }
+    pub fn in_use(alloc_tag: AllocTag) -> Self {
+        Self::Busy { alloc_tag }
     }
 }
 
-impl<const BUFFER_SIZE: usize, const BUFFER_N: usize> SharedBufferManager<BUFFER_SIZE, BUFFER_N> {
+impl<AllocTag: Copy + Clone + Eq + PartialEq, const BUFFER_SIZE: usize, const BUFFER_N: usize>
+    SharedBufferManager<AllocTag, BUFFER_SIZE, BUFFER_N>
+{
     pub fn new() -> Self {
         Self {
             buffers: [const { Mutex::new([0; BUFFER_SIZE]) }; BUFFER_N],
-            statuses: [const { Mutex::new([BufferStatus::Free; BUFFER_SIZE]) }; BUFFER_N],
+            statuses: core::array::from_fn(|_| {
+                Mutex::new([BufferStatus::<AllocTag>::free(); BUFFER_SIZE])
+            }),
         }
     }
 
     /// Allocate buffer
-    pub async fn allocate(&mut self, user_tag: u32) -> Option<BufferIdentify> {
+    pub async fn allocate(
+        &mut self,
+        user_tag: AllocTag,
+    ) -> Option<BufferIdentify<AllocTag, BUFFER_SIZE>> {
         for i in 0..BUFFER_N {
             // lock status
             let mut status = self.statuses[i].lock().await;
@@ -67,21 +85,25 @@ impl<const BUFFER_SIZE: usize, const BUFFER_N: usize> SharedBufferManager<BUFFER
                 continue;
             }
             // set in use
-            status.borrow_mut()[0] = BufferStatus::InUse { user_tag };
-            return Some(BufferIdentify::new(i as u32));
+            status.borrow_mut()[0] = BufferStatus::Busy {
+                alloc_tag: user_tag,
+            };
+            return Some(BufferIdentify::<AllocTag, BUFFER_SIZE>::new(
+                i as u32, user_tag,
+            ));
         }
         crate::warn!("allocate failed");
         None
     }
 
     /// Free buffer
-    pub async fn free(&mut self, id: BufferIdentify) {
+    pub async fn free(&mut self, id: BufferIdentify<AllocTag, BUFFER_SIZE>) {
         crate::assert!(id.buf_index < BUFFER_N as u32);
 
         // lock status
         let mut status = self.statuses[id.buf_index as usize].lock().await;
         // check if in use
-        if !matches!(status.borrow()[0], BufferStatus::InUse { .. }) {
+        if !matches!(status.borrow()[0], BufferStatus::Busy { .. }) {
             crate::warn!("free failed");
         }
         // set free
@@ -91,12 +113,12 @@ impl<const BUFFER_SIZE: usize, const BUFFER_N: usize> SharedBufferManager<BUFFER
     /// Get buffer body (mutable)
     pub async fn get_buf(
         &mut self,
-        id: BufferIdentify,
+        id: BufferIdentify<AllocTag, BUFFER_SIZE>,
     ) -> MutexGuard<'_, CriticalSectionRawMutex, [u8; BUFFER_SIZE]> {
         crate::assert!(id.buf_index < BUFFER_N as u32);
         // SAFETY: id is valid
         let mut status = self.statuses[id.buf_index as usize].lock().await;
-        if !matches!(status.borrow()[0], BufferStatus::InUse { .. }) {
+        if !matches!(status.borrow()[0], BufferStatus::Busy { .. }) {
             crate::unreachable!("free failed");
         }
 

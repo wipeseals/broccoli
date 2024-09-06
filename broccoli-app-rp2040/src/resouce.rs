@@ -1,7 +1,7 @@
 use core::cell::RefCell;
 use core::sync::atomic::AtomicBool;
 
-use crate::config::*;
+use crate::constants::*;
 use crate::ftl::buffer::SharedBufferManager;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;

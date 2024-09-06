@@ -19,21 +19,23 @@ use embassy_usb::{Builder, Config, Handler};
 use export::debug;
 use static_cell::StaticCell;
 
-use crate::config::*;
-use crate::ftl::interface::{FtlErrorCode, FtlReq, FtlReqId, FtlResp, FtlRespStatus};
+use crate::constants::*;
+use crate::ftl::interface::{
+    DataRequest, DataRequestError, DataRequestId, DataResponse, DataResponseStatus,
+};
 use crate::usb::msc::{BulkTransferRequest, MscBulkHandler, MscBulkHandlerConfig, MscCtrlHandler};
 
 /// Bulk Transfer -> Internal Request Channel
 static CHANNEL_BULK_TO_INTERNAL: Channel<
     CriticalSectionRawMutex,
-    FtlReq,
+    DataRequest,
     CHANNEL_BULK_TO_INTERNAL_N,
 > = Channel::new();
 
 /// Internal Request -> Bulk Transfer Channel
 static CHANNEL_INTERNAL_TO_BULK: Channel<
     CriticalSectionRawMutex,
-    FtlResp,
+    DataResponse,
     CHANNEL_INTERNAL_TO_BULK_N,
 > = Channel::new();
 
@@ -42,44 +44,44 @@ async fn internal_request_task() {
     loop {
         let request = CHANNEL_BULK_TO_INTERNAL.receive().await;
         match request.req_id {
-            FtlReqId::Echo => {
-                let response = FtlResp {
-                    req_id: FtlReqId::Echo,
+            DataRequestId::Echo => {
+                let response = DataResponse {
+                    req_id: DataRequestId::Echo,
                     requester_tag: request.requester_tag,
                     data_buf_id: request.data_buf_id,
-                    resp_status: FtlRespStatus::Success,
+                    resp_status: DataResponseStatus::Success,
                 };
                 CHANNEL_INTERNAL_TO_BULK.send(response).await;
             }
-            FtlReqId::Read => {
-                let response = FtlResp {
-                    req_id: FtlReqId::Read,
+            DataRequestId::Read => {
+                let response = DataResponse {
+                    req_id: DataRequestId::Read,
                     requester_tag: request.requester_tag,
                     data_buf_id: request.data_buf_id,
-                    resp_status: FtlRespStatus::Error {
-                        code: FtlErrorCode::NotImplemented,
+                    resp_status: DataResponseStatus::Error {
+                        code: DataRequestError::NotImplemented,
                     },
                 };
                 CHANNEL_INTERNAL_TO_BULK.send(response).await;
             }
-            FtlReqId::Write => {
-                let response = FtlResp {
-                    req_id: FtlReqId::Write,
+            DataRequestId::Write => {
+                let response = DataResponse {
+                    req_id: DataRequestId::Write,
                     requester_tag: request.requester_tag,
                     data_buf_id: request.data_buf_id,
-                    resp_status: FtlRespStatus::Error {
-                        code: FtlErrorCode::NotImplemented,
+                    resp_status: DataResponseStatus::Error {
+                        code: DataRequestError::NotImplemented,
                     },
                 };
                 CHANNEL_INTERNAL_TO_BULK.send(response).await;
             }
-            FtlReqId::Flush => {
-                let response = FtlResp {
-                    req_id: FtlReqId::Flush,
+            DataRequestId::Flush => {
+                let response = DataResponse {
+                    req_id: DataRequestId::Flush,
                     requester_tag: request.requester_tag,
                     data_buf_id: request.data_buf_id,
-                    resp_status: FtlRespStatus::Error {
-                        code: FtlErrorCode::NotImplemented,
+                    resp_status: DataResponseStatus::Error {
+                        code: DataRequestError::NotImplemented,
                     },
                 };
                 CHANNEL_INTERNAL_TO_BULK.send(response).await;

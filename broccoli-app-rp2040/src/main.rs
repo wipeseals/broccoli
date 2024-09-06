@@ -2,7 +2,7 @@
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
 
-mod config;
+mod constants;
 mod core0;
 mod core1;
 mod ftl;
