@@ -54,25 +54,7 @@ async fn data_request_task() {
         match request {
             DataRequest::Setup { req_tag } => {
                 // Setup
-                // Fill RAM Disk with FAT32 Boot Sector
-                ram_disk[0..512].copy_from_slice(&[
-                    0xEB, 0x3C, 0x90, b'M', b'S', b'D', b'O', b'S', b'5', b'.', b'0', 0x00, 0x02, 0x01,
-                    0x01, 0x00, 0x02, 0x00, 0x02, 0x00, 0x00, 0xF8, 0x00, 0x00, 0x3F, 0x00, 0xFF,
-                    0x00, 0x3F,]);
-                // Fill RAM Disk with FAT32 FS Information Sector
-                ram_disk[512..1024].copy_from_slice(&[
-                    0x52, 0x52, 0x61, 0x41, 0x55, 0x41, 0xAA, 0x55, 0xAA, 0x55,
-                ]);
-                // Fill RAM Disk with FAT32 Backup Boot Sector
-                ram_disk[1024..1536].copy_from_slice(&[
-                    0xEB, 0x3C, 0x90, b'M', b'S', b'D', b'O', b'S', b'5', b'.', b'0', 0x00, 0x02, 0x01,
-                    0x01, 0x00, 0x02, 0x00, 0x02, 0x00, 0x00, 0xF8, 0x00, 0x00, 0x3F, 0x00, 0xFF,
-                    0x00, 0x3F,]);
-                // Fill RAM Disk with FAT32 Backup FS Information Sector
-                ram_disk[1536..2048].copy_from_slice(&[
-                    0x52, 0x52, 0x61, 0x41, 0x55, 0x41, 0xAA, 0x55, 0xAA, 0x55,
-                ]);
-
+                // RAM Diskでは何もしない
                 CHANNEL_MSC_RESPONSE_TO_BULK
                     .send(DataResponse::Setup {
                         req_tag,
@@ -117,23 +99,31 @@ async fn data_request_task() {
                             .get_buf(read_buf_id)
                             .await
                             .as_mut();
-                        
+
                         // 読み出し先決定
                         let ram_offset = (lba + block_index) * USB_BLOCK_SIZE;
                         // 範囲外応答
                         if ram_offset + USB_BLOCK_SIZE > ram_disk.len() {
-                            crate::error!("Read out of range. lba: {}, block_index: {}", lba, block_index);
+                            crate::error!(
+                                "Read out of range. lba: {}, block_index: {}",
+                                lba,
+                                block_index
+                            );
                             CHANNEL_MSC_RESPONSE_TO_BULK
                                 .send(DataResponse::Read {
                                     req_tag,
                                     read_buf_id,
                                     data_count: block_index,
-                                    error: Some(DataRequestError::OutOfRange {lba: lba + block_index}),
+                                    error: Some(DataRequestError::OutOfRange {
+                                        lba: lba + block_index,
+                                    }),
                                 })
                                 .await;
                         } else {
                             // データをShared Bufferにコピーしてから応答
-                            read_buffer.copy_from_slice(&ram_disk[ram_offset..ram_offset + USB_BLOCK_SIZE]);
+                            read_buffer.copy_from_slice(
+                                &ram_disk[ram_offset..ram_offset + USB_BLOCK_SIZE],
+                            );
                             CHANNEL_MSC_RESPONSE_TO_BULK
                                 .send(DataResponse::Read {
                                     req_tag,
@@ -145,18 +135,16 @@ async fn data_request_task() {
                         }
                     }
                 }
-            },
+            }
             DataRequest::Write {
                 req_tag,
                 lba,
                 write_buf_id,
             } => {
                 // Get Buffer Body and Write Data
-                let mut write_buffer = LOGICAL_BLOCK_SHARED_BUFFERS
-                    .get_buf(write_buf_id)
-                    .await;
+                let mut write_buffer = LOGICAL_BLOCK_SHARED_BUFFERS.get_buf(write_buf_id).await;
                 let mut write_buffer = write_buffer.as_mut();
-                
+
                 // 書き込み先決定
                 let ram_offset = lba * USB_BLOCK_SIZE;
                 // 範囲外応答
@@ -168,7 +156,7 @@ async fn data_request_task() {
                     CHANNEL_MSC_RESPONSE_TO_BULK
                         .send(DataResponse::Write {
                             req_tag,
-                            error: Some(DataRequestError::OutOfRange { lba}),
+                            error: Some(DataRequestError::OutOfRange { lba }),
                         })
                         .await;
                 } else {
@@ -184,7 +172,7 @@ async fn data_request_task() {
                         })
                         .await;
                 }
-            },
+            }
             DataRequest::Flush { req_tag } => {
                 // Flush
                 // RAM Diskでは何もしない
@@ -194,7 +182,7 @@ async fn data_request_task() {
                         error: None,
                     })
                     .await
-            },
+            }
         };
     }
 }
