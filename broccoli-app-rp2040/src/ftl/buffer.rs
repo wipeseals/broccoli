@@ -3,6 +3,7 @@
 use core::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
+    future::Future,
 };
 
 use cortex_m::interrupt::free;
@@ -93,6 +94,28 @@ impl<AllocTag: Copy + Clone + Eq + PartialEq, const BUFFER_SIZE: usize, const BU
             ));
         }
         crate::warn!("allocate failed");
+        None
+    }
+
+    /// Allocate buffer with retry
+    pub async fn allocate_with_retry<DelayF, Fut>(
+        &mut self,
+        user_tag: AllocTag,
+        delay_func: DelayF,
+        retry_count_max: u32,
+    ) -> Option<BufferIdentify<AllocTag, BUFFER_SIZE>>
+    where
+        DelayF: Fn() -> Fut,
+        Fut: Future<Output = ()>,
+    {
+        for i in 0..retry_count_max {
+            if let Some(buf) = self.allocate(user_tag).await {
+                return Some(buf);
+            }
+            // 他Taskにリソースを奪われた場合は、再度リクエストを送る
+            // ただし、即リクエストしてもリソース開放に至らないケースがあるので、時間Delayを入れる
+            delay_func().await;
+        }
         None
     }
 

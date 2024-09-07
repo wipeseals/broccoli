@@ -473,7 +473,7 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                 let scsi_commands = cbw_packet.get_commands();
                 let scsi_command = scsi_commands[0];
                 // コマンドごとに処理
-                let send_resp_status = match scsi_command {
+                let send_resp_status: Result<(), EndpointError> = match scsi_command {
                     x if x == ScsiCommand::TestUnitReady as u8 => {
                         debug!("Test Unit Ready");
                         // カードの抜き差しなどはないので問題無しで応答
@@ -612,9 +612,9 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                 }
             }
 
+            // CSW で Phase Error を返す
             if let Some(tag) = phase_error_tag {
                 error!("Phase Error Tag: {:#x}", tag);
-                // CSW で Phase Error を返す
                 let mut csw_packet = CommandStatusWrapperPacket::new();
                 csw_packet.tag = tag;
                 csw_packet.data_residue = 0;
