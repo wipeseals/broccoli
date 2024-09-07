@@ -383,6 +383,35 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
         }
     }
 
+    /// Handle response for simple command
+    async fn handle_response_single(
+        write_ep: &mut <D as Driver<'d>>::EndpointIn,
+        status: CommandBlockStatus,
+        datas: &[u8],
+        cbw_packet: &CommandBlockWrapperPacket,
+        csw_packet: &mut CommandStatusWrapperPacket,
+    ) -> Result<(), EndpointError> {
+        if datas.len() > 0 {
+            // transfer data
+            debug!("Write Data: {:#x}", datas);
+            write_ep.write(datas).await?;
+            // update csw_packet.data_residue
+            if datas.len() < cbw_packet.data_transfer_length as usize {
+                csw_packet.data_residue =
+                    (cbw_packet.data_transfer_length as usize - datas.len()) as u32;
+            }
+        }
+        // update csw_packet
+        csw_packet.status = status;
+
+        // Status Transport
+        let csw_data = csw_packet.to_data();
+        debug!("Send CSW: {:#x}", csw_packet);
+        write_ep.write(&csw_data).await?;
+
+        Ok(())
+    }
+
     /// Main loop for bulk-only transport
     /// TODO: 関数肥大化しているので、分割する
     pub async fn run(&mut self) -> ! {
@@ -445,31 +474,6 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
 
                 let request_write_len = cbw_packet.data_transfer_length as usize;
 
-                // write data １回で応答できるケース向けの関数
-                let handle_response_single = |status: CommandBlockStatus, datas: &[u8]| {
-                    async move {
-                        if datas.len() > 0 {
-                            // transfer data
-                            debug!("Write Data: {:#x}", datas);
-                            write_ep.write(datas).await?;
-                            // update csw_packet.data_residue
-                            if datas.len() < cbw_packet.data_transfer_length as usize {
-                                csw_packet.data_residue =
-                                    (cbw_packet.data_transfer_length as usize - datas.len()) as u32;
-                            }
-                        }
-                        // update csw_packet
-                        csw_packet.status = status;
-
-                        // Status Transport
-                        let csw_data = csw_packet.to_data();
-                        debug!("Send CSW: {:#x}", csw_packet);
-                        write_ep.write(&csw_data).await?;
-
-                        Ok::<(), EndpointError>(())
-                    }
-                };
-
                 // Parse SCSI Command
                 let scsi_commands = cbw_packet.get_commands();
                 let scsi_command = scsi_commands[0];
@@ -478,7 +482,14 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                     x if x == ScsiCommand::TestUnitReady as u8 => {
                         debug!("Test Unit Ready");
                         // カードの抜き差しなどはないので問題無しで応答
-                        handle_response_single(CommandBlockStatus::CommandPassed, &[]).await
+                        Self::handle_response_single(
+                            write_ep,
+                            CommandBlockStatus::CommandPassed,
+                            &[],
+                            &cbw_packet,
+                            &mut csw_packet,
+                        )
+                        .await
                     }
                     x if x == ScsiCommand::Inquiry as u8 => {
                         debug!("Inquiry");
@@ -491,7 +502,14 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
 
                         let mut write_data = [0u8; INQUIRY_COMMAND_DATA_SIZE];
                         inquiry_data.prepare_to_buf(&mut write_data);
-                        handle_response_single(CommandBlockStatus::CommandPassed, &write_data).await
+                        Self::handle_response_single(
+                            write_ep,
+                            CommandBlockStatus::CommandPassed,
+                            &write_data,
+                            &cbw_packet,
+                            &mut csw_packet,
+                        )
+                        .await
                     }
                     x if x == ScsiCommand::ReadFormatCapacities as u8 => {
                         debug!("Read Format Capacities");
@@ -503,7 +521,14 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
 
                         let mut write_data = [0u8; READ_FORMAT_CAPACITIES_DATA_SIZE];
                         read_format_capacities_data.prepare_to_buf(&mut write_data);
-                        handle_response_single(CommandBlockStatus::CommandPassed, &write_data).await
+                        Self::handle_response_single(
+                            write_ep,
+                            CommandBlockStatus::CommandPassed,
+                            &write_data,
+                            &cbw_packet,
+                            &mut csw_packet,
+                        )
+                        .await
                     }
                     x if x == ScsiCommand::ReadCapacity as u8 => {
                         debug!("Read Capacity");
@@ -515,7 +540,14 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
 
                         let mut write_data = [0u8; READ_CAPACITY_16_DATA_SIZE];
                         read_capacity_data.prepare_to_buf(&mut write_data);
-                        handle_response_single(CommandBlockStatus::CommandPassed, &write_data).await
+                        Self::handle_response_single(
+                            write_ep,
+                            CommandBlockStatus::CommandPassed,
+                            &write_data,
+                            &cbw_packet,
+                            &mut csw_packet,
+                        )
+                        .await
                     }
                     x if x == ScsiCommand::ModeSense6 as u8 => {
                         debug!("Mode Sense 6");
@@ -524,7 +556,14 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
 
                         let mut write_data = [0u8; MODE_SENSE_6_DATA_SIZE];
                         mode_sense_data.prepare_to_buf(&mut write_data);
-                        handle_response_single(CommandBlockStatus::CommandPassed, &write_data).await
+                        Self::handle_response_single(
+                            write_ep,
+                            CommandBlockStatus::CommandPassed,
+                            &write_data,
+                            &cbw_packet,
+                            &mut csw_packet,
+                        )
+                        .await
                     }
                     x if x == ScsiCommand::RequestSense as u8 => {
                         debug!("Request Sense");
@@ -538,52 +577,17 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
 
                         let mut write_data = [0u8; REQUEST_SENSE_DATA_SIZE];
                         latest_sense_data.unwrap().prepare_to_buf(&mut write_data);
-                        handle_response_single(CommandBlockStatus::CommandPassed, &write_data).await
+                        Self::handle_response_single(
+                            write_ep,
+                            CommandBlockStatus::CommandPassed,
+                            &write_data,
+                            &cbw_packet,
+                            &mut csw_packet,
+                        )
+                        .await
                     }
                     // x if x == ScsiCommand::Read10 as u8 => {
                     //     debug!("Read 10");
-                    //     if cbw_packet.command_length < READ_10_DATA_SIZE as u8 {
-                    //         error!("Invalid Read 10 Command Length: {:#x}", cbw_packet);
-                    //         latest_sense_data = Some(RequestSenseData::from(
-                    //             SenseKey::IllegalRequest,
-                    //             AdditionalSenseCodeType::IllegalRequestParameterLengthError,
-                    //         ));
-                    //         csw_packet.status = CommandBlockStatus::CommandFailed;
-                    //     } else {
-                    //         // Parse Cmd
-                    //         let cmd = Read10Command::from_data(scsi_commands);
-                    //         let lba = cmd.lba;
-                    //         let transfer_len = cmd.transfer_length;
-                    //         // TODO: Read Request積むのと、Read Response待つのを同時にやる
-                    //         for transfer_count in 0..transfer_len {
-                    //             // TODO: Buffer管理機構からBufferを借用して、ここでは使わない
-                    //             let mut read_data = [0u8; 512];
-                    //             self.internal_request_sender
-                    //                 .send(InternalTransferRequest::new(
-                    //                     InternalTransferRequestId::Read,
-                    //                     cbw_packet.tag,
-                    //                     Some(DataBufferIdentify { tag: 0 }),
-                    //                 ))
-                    //                 .await;
-                    //             let response = self.internal_request_receiver.receive().await;
-                    //             // Check response
-                    //             if response.resp_status != InternalTransferResponseStatus::Success {
-                    //                 error!("Read Error: {:?}", response);
-                    //                 latest_sense_data = Some(RequestSenseData::from(
-                    //                     SenseKey::HardwareError,
-                    //                     AdditionalSenseCodeType::HardwareErrorGeneral,
-                    //                 ));
-                    //                 csw_packet.status = CommandBlockStatus::CommandFailed;
-                    //                 break;
-                    //             }
-                    //             // TODO: Copy data
-                    //             // Hostにデータを書き込む
-                    //             let Ok(_) = write_ep.write(&read_data).await else {
-                    //                 phase_error_tag = Some(cbw_packet.tag);
-                    //                 break 'read_ep_loop;
-                    //             };
-                    //         }
-                    //     }
                     // }
                     _ => {
                         error!("Unsupported Command: {:#x}", scsi_command);
@@ -593,7 +597,14 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                             AdditionalSenseCodeType::IllegalRequestInvalidCommand,
                         ));
 
-                        handle_response_single(CommandBlockStatus::CommandFailed, &[]).await
+                        Self::handle_response_single(
+                            write_ep,
+                            CommandBlockStatus::CommandFailed,
+                            &[],
+                            &cbw_packet,
+                            &mut csw_packet,
+                        )
+                        .await
                     }
                 };
 
