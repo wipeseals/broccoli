@@ -2,7 +2,7 @@ use super::buffer::BufferIdentify;
 
 /// Data Transfer Request ID
 #[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
-pub enum DataRequest<ReqTag, const DATA_SIZE: usize> {
+pub enum DataRequest<ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usize> {
     /// Echo Request
     /// 何もせずに応答する
     Echo { req_tag: ReqTag },
@@ -22,7 +22,7 @@ pub enum DataRequest<ReqTag, const DATA_SIZE: usize> {
     Write {
         req_tag: ReqTag,
         lba: u32,
-        write_buf_id: BufferIdentify<DATA_SIZE>,
+        write_buf_id: BufferIdentify<ReqTag, DATA_SIZE>,
     },
 
     /// Flush Request
@@ -42,7 +42,7 @@ pub enum DataRequestError {
 
 /// Internal Transfer Response
 #[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
-pub enum DataResponse<ReqTag, const DATA_SIZE: usize> {
+pub enum DataResponse<ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usize> {
     /// Echo Response
     /// Echo Requestに対する応答
     Echo {
@@ -54,7 +54,7 @@ pub enum DataResponse<ReqTag, const DATA_SIZE: usize> {
     /// Read Requestに対する応答
     Read {
         req_tag: ReqTag,
-        read_buf_id: BufferIdentify<DATA_SIZE>,
+        read_buf_id: BufferIdentify<ReqTag, DATA_SIZE>,
         data_count: u32,
         error: Option<DataRequestError>,
     },
@@ -74,7 +74,7 @@ pub enum DataResponse<ReqTag, const DATA_SIZE: usize> {
     },
 }
 
-impl<ReqTag, const DATA_SIZE: usize> DataRequest<ReqTag, DATA_SIZE> {
+impl<ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usize> DataRequest<ReqTag, DATA_SIZE> {
     pub fn echo(req_tag: ReqTag) -> Self {
         Self::Echo { req_tag }
     }
@@ -87,7 +87,11 @@ impl<ReqTag, const DATA_SIZE: usize> DataRequest<ReqTag, DATA_SIZE> {
         }
     }
 
-    pub fn write(req_tag: ReqTag, lba: u32, write_buf_id: BufferIdentify<DATA_SIZE>) -> Self {
+    pub fn write(
+        req_tag: ReqTag,
+        lba: u32,
+        write_buf_id: BufferIdentify<ReqTag, DATA_SIZE>,
+    ) -> Self {
         Self::Write {
             req_tag,
             lba,
@@ -100,14 +104,16 @@ impl<ReqTag, const DATA_SIZE: usize> DataRequest<ReqTag, DATA_SIZE> {
     }
 }
 
-impl<ReqTag, const DATA_SIZE: usize> DataResponse<ReqTag, DATA_SIZE> {
+impl<ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usize>
+    DataResponse<ReqTag, DATA_SIZE>
+{
     pub fn echo(req_tag: ReqTag, error: Option<DataRequestError>) -> Self {
         Self::Echo { req_tag, error }
     }
 
     pub fn read(
         req_tag: ReqTag,
-        read_buf_id: BufferIdentify<DATA_SIZE>,
+        read_buf_id: BufferIdentify<ReqTag, DATA_SIZE>,
         data_count: u32,
         error: Option<DataRequestError>,
     ) -> Self {

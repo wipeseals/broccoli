@@ -19,74 +19,29 @@ use embassy_usb::{Builder, Config, Handler};
 use export::debug;
 use static_cell::StaticCell;
 
-use crate::constants::*;
-use crate::ftl::interface::{
-    DataRequest, DataRequestError, DataRequestId, DataResponse, DataResponseStatus,
-};
+use crate::ftl::request::{DataRequest, DataResponse};
+use crate::shared::constant::*;
+use crate::shared::datatype::MscDataTransferTag;
 use crate::usb::msc::{BulkTransferRequest, MscBulkHandler, MscBulkHandlerConfig, MscCtrlHandler};
 
 /// Bulk Transfer -> Internal Request Channel
-static CHANNEL_BULK_TO_INTERNAL: Channel<
+static CHANNEL_MSC_TO_DATA_REQUEST: Channel<
     CriticalSectionRawMutex,
-    DataRequest,
-    CHANNEL_BULK_TO_INTERNAL_N,
+    DataRequest<MscDataTransferTag, USB_BLOCK_SIZE>,
+    CHANNEL_BULK_TO_DATA_REQUEST_N,
 > = Channel::new();
 
 /// Internal Request -> Bulk Transfer Channel
-static CHANNEL_INTERNAL_TO_BULK: Channel<
+static CHANNEL_MSC_RESPONSE_TO_BULK: Channel<
     CriticalSectionRawMutex,
-    DataResponse,
-    CHANNEL_INTERNAL_TO_BULK_N,
+    DataResponse<MscDataTransferTag, USB_BLOCK_SIZE>,
+    CHANNEL_DATA_RESPONSE_TO_BULK_N,
 > = Channel::new();
 
 /// USB Bulk Transfer to Internal Request Channel
-async fn internal_request_task() {
+async fn data_request_task() {
     loop {
-        let request = CHANNEL_BULK_TO_INTERNAL.receive().await;
-        match request.req_id {
-            DataRequestId::Echo => {
-                let response = DataResponse {
-                    req_id: DataRequestId::Echo,
-                    requester_tag: request.requester_tag,
-                    data_buf_id: request.data_buf_id,
-                    resp_status: DataResponseStatus::Success,
-                };
-                CHANNEL_INTERNAL_TO_BULK.send(response).await;
-            }
-            DataRequestId::Read => {
-                let response = DataResponse {
-                    req_id: DataRequestId::Read,
-                    requester_tag: request.requester_tag,
-                    data_buf_id: request.data_buf_id,
-                    resp_status: DataResponseStatus::Error {
-                        code: DataRequestError::NotImplemented,
-                    },
-                };
-                CHANNEL_INTERNAL_TO_BULK.send(response).await;
-            }
-            DataRequestId::Write => {
-                let response = DataResponse {
-                    req_id: DataRequestId::Write,
-                    requester_tag: request.requester_tag,
-                    data_buf_id: request.data_buf_id,
-                    resp_status: DataResponseStatus::Error {
-                        code: DataRequestError::NotImplemented,
-                    },
-                };
-                CHANNEL_INTERNAL_TO_BULK.send(response).await;
-            }
-            DataRequestId::Flush => {
-                let response = DataResponse {
-                    req_id: DataRequestId::Flush,
-                    requester_tag: request.requester_tag,
-                    data_buf_id: request.data_buf_id,
-                    resp_status: DataResponseStatus::Error {
-                        code: DataRequestError::NotImplemented,
-                    },
-                };
-                CHANNEL_INTERNAL_TO_BULK.send(response).await;
-            }
-        }
+        let request = CHANNEL_MSC_TO_DATA_REQUEST.receive().await;
     }
 }
 
@@ -129,8 +84,8 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
             USB_BLOCK_SIZE,
         ),
         channel_ctrl_to_bulk.dyn_receiver(),
-        CHANNEL_BULK_TO_INTERNAL.dyn_sender(),
-        CHANNEL_INTERNAL_TO_BULK.dyn_receiver(),
+        CHANNEL_MSC_TO_DATA_REQUEST.dyn_sender(),
+        CHANNEL_MSC_RESPONSE_TO_BULK.dyn_receiver(),
     );
     ctrl_handler.build(&mut builder, config, &mut bulk_handler);
 
@@ -143,8 +98,8 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
 }
 
 #[embassy_executor::task]
-pub async fn core0_main(driver: Driver<'static, USB>) {
+pub async fn main_task(driver: Driver<'static, USB>) {
     let usb_transport_fut = usb_transport_task(driver);
-    let internal_request_fut = internal_request_task();
+    let internal_request_fut = data_request_task();
     join(usb_transport_fut, internal_request_fut).await;
 }

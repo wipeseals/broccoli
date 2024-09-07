@@ -1,4 +1,5 @@
 use core::borrow::{Borrow, BorrowMut};
+use core::fmt::Error;
 
 use byteorder::{ByteOrder, LittleEndian};
 use defmt::*;
@@ -15,7 +16,7 @@ use embassy_sync::blocking_mutex::Mutex;
 use embassy_sync::channel::{Channel, DynamicReceiver, DynamicSender, Receiver, Sender};
 use embassy_time::{Timer, WithTimeout};
 use embassy_usb::control::{InResponse, OutResponse, Recipient, Request, RequestType};
-use embassy_usb::driver::{Driver, Endpoint, EndpointIn, EndpointOut};
+use embassy_usb::driver::{Driver, Endpoint, EndpointError, EndpointIn, EndpointOut};
 use embassy_usb::msos::{self, windows_version};
 use embassy_usb::types::InterfaceNumber;
 use embassy_usb::{Builder, Config, Handler};
@@ -23,8 +24,9 @@ use export::debug;
 use static_cell::StaticCell;
 
 use crate::ftl::buffer::{BufferIdentify, BufferStatus};
-use crate::ftl::interface::{DataRequest, DataRequestId, DataResponse, DataResponseStatus};
-use crate::resouce::{LedState, CHANNEL_USB_TO_LEDCTRL};
+use crate::ftl::request::{DataRequest, DataResponse};
+use crate::shared::constant::*;
+use crate::shared::datatype::MscDataTransferTag;
 use crate::usb::scsi::*;
 
 // interfaceClass: 0x08 (Mass Storage)
@@ -243,15 +245,15 @@ pub struct MscBulkHandlerConfig {
     pub vendor_id: [u8; 8],
     pub product_id: [u8; 16],
     pub product_revision_level: [u8; 4],
-    pub num_blocks: u32,
-    pub block_size: u32,
+    pub num_blocks: usize,
+    pub block_size: usize,
 }
 
 /// USB Mass Storage Class Bulk Handler
 /// This handler is used to handle the bulk transfers for the Mass Storage Class.
 pub struct MscBulkHandler<'d, D: Driver<'d>> {
     /// Bulk Transfer Request Receiver (for Mass Storage Reset)
-    bulk_request_receiver: DynamicReceiver<'d, BulkTransferRequest>,
+    ctrl_to_bulk_request_receiver: DynamicReceiver<'d, BulkTransferRequest>,
     /// Bulk Endpoint Out
     read_ep: Option<<D as Driver<'d>>::EndpointOut>,
     /// Bulk Endpoint In
@@ -260,10 +262,10 @@ pub struct MscBulkHandler<'d, D: Driver<'d>> {
     /// Config
     config: MscBulkHandlerConfig,
 
-    /// Request Read/Write to NAND Flash
-    internal_request_sender: DynamicSender<'d, DataRequest>,
-    /// Response Read/Write to NAND Flash
-    internal_request_receiver: DynamicReceiver<'d, DataResponse>,
+    /// Request Read/Write to Flash Translation Layer
+    data_request_sender: DynamicSender<'d, DataRequest<MscDataTransferTag, USB_BLOCK_SIZE>>,
+    /// Response Read/Write from Flash Translation Layer
+    data_response_receiver: DynamicReceiver<'d, DataResponse<MscDataTransferTag, USB_BLOCK_SIZE>>,
 }
 
 impl<'d> Handler for MscCtrlHandler<'d> {
@@ -348,8 +350,8 @@ impl MscBulkHandlerConfig {
         vendor_id: [u8; 8],
         product_id: [u8; 16],
         product_revision_level: [u8; 4],
-        num_blocks: u32,
-        block_size: u32,
+        num_blocks: usize,
+        block_size: usize,
     ) -> Self {
         Self {
             vendor_id,
@@ -364,17 +366,20 @@ impl MscBulkHandlerConfig {
 impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
     pub fn new(
         config: MscBulkHandlerConfig,
-        bulk_request_receiver: DynamicReceiver<'d, BulkTransferRequest>,
-        internal_request_sender: DynamicSender<'d, DataRequest>,
-        internal_request_receiver: DynamicReceiver<'d, DataResponse>,
+        ctrl_to_bulk_request_receiver: DynamicReceiver<'d, BulkTransferRequest>,
+        data_request_sender: DynamicSender<'d, DataRequest<MscDataTransferTag, USB_BLOCK_SIZE>>,
+        data_response_receiver: DynamicReceiver<
+            'd,
+            DataResponse<MscDataTransferTag, USB_BLOCK_SIZE>,
+        >,
     ) -> Self {
         Self {
             read_ep: None,
             write_ep: None,
             config,
-            bulk_request_receiver,
-            internal_request_sender,
-            internal_request_receiver,
+            ctrl_to_bulk_request_receiver,
+            data_request_sender,
+            data_response_receiver,
         }
     }
 
@@ -397,14 +402,16 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
 
             'read_ep_loop: loop {
                 // Check if Mass Storage Reset occurred
-                if (self.bulk_request_receiver.try_receive() == Ok(BulkTransferRequest::Reset)) {
+                if (self.ctrl_to_bulk_request_receiver.try_receive()
+                    == Ok(BulkTransferRequest::Reset))
+                {
                     debug!("Mass Storage Reset");
                     phase_error_tag = None;
                     break 'read_ep_loop;
                 }
 
                 // Command Transport
-                let mut read_buf = [0u8; BULK_TRANSFER_MAX_DATA_TRANSFER_LENGTH];
+                let mut read_buf = [0u8; USB_BLOCK_SIZE]; // read buffer分確保
                 let Ok(read_cbw_size) = read_ep.read(&mut read_buf).await else {
                     error!("Read EP Error (CBW)");
                     phase_error_tag = None; // unknown tag
@@ -433,78 +440,105 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                 csw_packet.data_residue = 0;
                 csw_packet.status = CommandBlockStatus::CommandPassed;
 
-                // HostToDeviceの場合、PhaseError対策に先に読んでデータを保持しておく
-                if cbw_packet.data_direction() == DataDirection::HostToDevice {
-                    let Ok(read_data_size) = read_ep.read(&mut read_buf).await else {
-                        phase_error_tag = Some(cbw_packet.tag);
-                        break 'read_ep_loop;
-                    };
-                }
-                // DeviceToHostの場合の書くためのバッファ
-                let mut write_buf = [0u8; BULK_TRANSFER_MAX_DATA_TRANSFER_LENGTH];
+                // Phase Error時の対応用にtagを保持
+                phase_error_tag = Some(cbw_packet.tag);
+
                 let request_write_len = cbw_packet.data_transfer_length as usize;
-                let mut actual_write_len = 0usize;
+
+                // write data １回で応答できるケース向けの関数
+                let handle_response_single = |status: CommandBlockStatus, datas: &[u8]| {
+                    async move {
+                        if datas.len() > 0 {
+                            // transfer data
+                            debug!("Write Data: {:#x}", datas);
+                            write_ep.write(datas).await?;
+                            // update csw_packet.data_residue
+                            if datas.len() < cbw_packet.data_transfer_length as usize {
+                                csw_packet.data_residue =
+                                    (cbw_packet.data_transfer_length as usize - datas.len()) as u32;
+                            }
+                        }
+                        // update csw_packet
+                        csw_packet.status = status;
+
+                        // Status Transport
+                        let csw_data = csw_packet.to_data();
+                        debug!("Send CSW: {:#x}", csw_packet);
+                        write_ep.write(&csw_data).await?;
+
+                        Ok::<(), EndpointError>(())
+                    }
+                };
 
                 // Parse SCSI Command
                 let scsi_commands = cbw_packet.get_commands();
                 let scsi_command = scsi_commands[0];
-                match scsi_command {
+                // コマンドごとに処理
+                let send_resp_status = match scsi_command {
                     x if x == ScsiCommand::TestUnitReady as u8 => {
                         debug!("Test Unit Ready");
                         // カードの抜き差しなどはないので問題無しで応答
-                        csw_packet.status = CommandBlockStatus::CommandPassed;
+                        handle_response_single(CommandBlockStatus::CommandPassed, &[]).await
                     }
                     x if x == ScsiCommand::Inquiry as u8 => {
                         debug!("Inquiry");
                         // Inquiry data. resp fixed data
-                        actual_write_len = INQUIRY_COMMAND_DATA_SIZE;
                         let inquiry_data = InquiryCommandData::new(
                             self.config.vendor_id,
                             self.config.product_id,
                             self.config.product_revision_level,
                         );
-                        inquiry_data.prepare_to_buf(&mut write_buf[0..actual_write_len]);
+
+                        let mut write_data = [0u8; INQUIRY_COMMAND_DATA_SIZE];
+                        inquiry_data.prepare_to_buf(&mut write_data);
+                        handle_response_single(CommandBlockStatus::CommandPassed, &write_data).await
                     }
                     x if x == ScsiCommand::ReadFormatCapacities as u8 => {
                         debug!("Read Format Capacities");
                         // Read Format Capacities data. resp fixed data
-                        actual_write_len = READ_FORMAT_CAPACITIES_DATA_SIZE;
                         let read_format_capacities_data = ReadFormatCapacitiesData::new(
-                            self.config.num_blocks,
-                            self.config.block_size,
+                            self.config.num_blocks as u32,
+                            self.config.block_size as u32,
                         );
-                        read_format_capacities_data
-                            .prepare_to_buf(&mut write_buf[0..actual_write_len]);
+
+                        let mut write_data = [0u8; READ_FORMAT_CAPACITIES_DATA_SIZE];
+                        read_format_capacities_data.prepare_to_buf(&mut write_data);
+                        handle_response_single(CommandBlockStatus::CommandPassed, &write_data).await
                     }
                     x if x == ScsiCommand::ReadCapacity as u8 => {
                         debug!("Read Capacity");
                         // Read Capacity data. resp fixed data
-                        actual_write_len = READ_CAPACITY_16_DATA_SIZE;
-                        let read_capacity_data =
-                            ReadCapacityData::new(self.config.num_blocks, self.config.block_size);
-                        read_capacity_data.prepare_to_buf(&mut write_buf[0..actual_write_len]);
+                        let read_capacity_data = ReadCapacityData::new(
+                            self.config.num_blocks as u32,
+                            self.config.block_size as u32,
+                        );
+
+                        let mut write_data = [0u8; READ_CAPACITY_16_DATA_SIZE];
+                        read_capacity_data.prepare_to_buf(&mut write_data);
+                        handle_response_single(CommandBlockStatus::CommandPassed, &write_data).await
                     }
                     x if x == ScsiCommand::ModeSense6 as u8 => {
                         debug!("Mode Sense 6");
                         // Mode Sense 6 data. resp fixed data
-                        actual_write_len = MODE_SENSE_6_DATA_SIZE;
                         let mode_sense_data = ModeSense6Data::new();
-                        mode_sense_data.prepare_to_buf(&mut write_buf[0..actual_write_len]);
+
+                        let mut write_data = [0u8; MODE_SENSE_6_DATA_SIZE];
+                        mode_sense_data.prepare_to_buf(&mut write_data);
+                        handle_response_single(CommandBlockStatus::CommandPassed, &write_data).await
                     }
                     x if x == ScsiCommand::RequestSense as u8 => {
                         debug!("Request Sense");
                         // Error reporting
-                        actual_write_len = REQUEST_SENSE_DATA_SIZE;
                         if latest_sense_data.is_none() {
                             latest_sense_data = Some(RequestSenseData::from(
                                 SenseKey::NoSense,
                                 AdditionalSenseCodeType::NoAdditionalSenseInformation,
                             ));
                         }
-                        latest_sense_data
-                            .unwrap()
-                            .prepare_to_buf(&mut write_buf[0..actual_write_len]);
-                        latest_sense_data = None;
+
+                        let mut write_data = [0u8; REQUEST_SENSE_DATA_SIZE];
+                        latest_sense_data.unwrap().prepare_to_buf(&mut write_data);
+                        handle_response_single(CommandBlockStatus::CommandPassed, &write_data).await
                     }
                     // x if x == ScsiCommand::Read10 as u8 => {
                     //     debug!("Read 10");
@@ -559,32 +593,8 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                             AdditionalSenseCodeType::IllegalRequestInvalidCommand,
                         ));
 
-                        actual_write_len = 0;
-                        csw_packet.status = CommandBlockStatus::CommandFailed;
+                        handle_response_single(CommandBlockStatus::CommandFailed, &[]).await
                     }
-                }
-
-                // Data Transport (DeviceToHost)
-                if actual_write_len > 0 {
-                    // transfer data
-                    debug!("Write Data: {:#x}", write_buf[0..actual_write_len]);
-                    let Ok(_) = write_ep.write(&write_buf[0..actual_write_len]).await else {
-                        phase_error_tag = Some(cbw_packet.tag);
-                        break 'read_ep_loop;
-                    };
-                    // update csw_packet
-                    csw_packet.status = CommandBlockStatus::CommandPassed;
-                    if actual_write_len < request_write_len {
-                        csw_packet.data_residue = (request_write_len - actual_write_len) as u32;
-                    }
-                }
-
-                // Status Transport
-                let csw_data = csw_packet.to_data();
-                debug!("Send CSW: {:#x}", csw_packet);
-                let Ok(_) = write_ep.write(&csw_data).await else {
-                    error!("Write EP Error");
-                    break 'read_ep_loop;
                 };
 
                 // ループ内の処理をやりきれるケースはPhaseErrorが発生していないので、tagをクリア

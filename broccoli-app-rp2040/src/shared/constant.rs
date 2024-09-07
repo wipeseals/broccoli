@@ -1,3 +1,5 @@
+/// Core1 task stack size
+pub const CORE1_TASK_STACK_SIZE: usize = 4096;
 /// USB device vendor ID
 pub const USB_VID: u16 = 0xc0de;
 /// USB device product ID
@@ -25,15 +27,15 @@ pub const USB_BLOCK_SIZE: usize = 512;
 /// USB device total size
 pub const USB_TOTAL_SIZE: usize = USB_NUM_BLOCKS * USB_BLOCK_SIZE;
 /// LEDCTRL channel channel size
-pub const CHANNEL_USB_TO_LEDCTRL_N: usize = 1;
+pub const CHANNEL_LEDCTRL_N: usize = 1;
 /// USB Control Transfer to Bulk Transfer channel size
 pub const CHANNEL_CTRL_TO_BULK_N: usize = 2;
 /// USB Bulk Transfer to Internal Request channel size
-pub const CHANNEL_BULK_TO_INTERNAL_N: usize = 4;
+pub const CHANNEL_BULK_TO_DATA_REQUEST_N: usize = 8;
 /// USB Internal Request to Bulk Transfer channel size
-pub const CHANNEL_INTERNAL_TO_BULK_N: usize = 4;
+pub const CHANNEL_DATA_RESPONSE_TO_BULK_N: usize = 8;
 /// USB block size
-pub const LOGICAL_BLOCK_SIZE: usize = USB_BLOCK_SIZE as usize;
+pub const LOGICAL_BLOCK_SIZE: usize = USB_BLOCK_SIZE;
 /// USB block buffer count
 pub const LOGICAL_BLOCK_BUFFER_N: usize = 8;
 /// NAND page size usable
@@ -44,6 +46,6 @@ pub const NAND_PAGE_SIZE_METADATA: usize = 128;
 /// NAND page size total (usable + metadata)
 pub const NAND_PAGE_SIZE_TOTAL: usize = NAND_PAGE_SIZE_USABLE + NAND_PAGE_SIZE_METADATA;
 /// NAND page buffer size
-pub const NAND_PAGE_BUFFER_SIZE: usize = NAND_PAGE_SIZE_TOTAL as usize;
+pub const NAND_PAGE_BUFFER_SIZE: usize = NAND_PAGE_SIZE_TOTAL;
 /// NAND page buffer count
 pub const NAND_PAGE_BUFFER_N: usize = 4;
