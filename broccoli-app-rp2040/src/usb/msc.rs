@@ -387,18 +387,18 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
     async fn handle_response_single(
         write_ep: &mut <D as Driver<'d>>::EndpointIn,
         status: CommandBlockStatus,
-        datas: &[u8],
+        write_data: Option<&[u8]>,
         cbw_packet: &CommandBlockWrapperPacket,
         csw_packet: &mut CommandStatusWrapperPacket,
     ) -> Result<(), EndpointError> {
-        if datas.len() > 0 {
+        if let Some(data) = write_data {
             // transfer data
-            debug!("Write Data: {:#x}", datas);
-            write_ep.write(datas).await?;
+            debug!("Write Data: {:#x}", data);
+            write_ep.write(data).await?;
             // update csw_packet.data_residue
-            if datas.len() < cbw_packet.data_transfer_length as usize {
+            if data.len() < cbw_packet.data_transfer_length as usize {
                 csw_packet.data_residue =
-                    (cbw_packet.data_transfer_length as usize - datas.len()) as u32;
+                    (cbw_packet.data_transfer_length as usize - data.len()) as u32;
             }
         }
         // update csw_packet
@@ -469,11 +469,6 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                 csw_packet.data_residue = 0;
                 csw_packet.status = CommandBlockStatus::CommandPassed;
 
-                // Phase Error時の対応用にtagを保持
-                phase_error_tag = Some(cbw_packet.tag);
-
-                let request_write_len = cbw_packet.data_transfer_length as usize;
-
                 // Parse SCSI Command
                 let scsi_commands = cbw_packet.get_commands();
                 let scsi_command = scsi_commands[0];
@@ -485,7 +480,7 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                         Self::handle_response_single(
                             write_ep,
                             CommandBlockStatus::CommandPassed,
-                            &[],
+                            None,
                             &cbw_packet,
                             &mut csw_packet,
                         )
@@ -505,7 +500,7 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                         Self::handle_response_single(
                             write_ep,
                             CommandBlockStatus::CommandPassed,
-                            &write_data,
+                            Some(&write_data),
                             &cbw_packet,
                             &mut csw_packet,
                         )
@@ -524,7 +519,7 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                         Self::handle_response_single(
                             write_ep,
                             CommandBlockStatus::CommandPassed,
-                            &write_data,
+                            Some(&write_data),
                             &cbw_packet,
                             &mut csw_packet,
                         )
@@ -543,7 +538,7 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                         Self::handle_response_single(
                             write_ep,
                             CommandBlockStatus::CommandPassed,
-                            &write_data,
+                            Some(&write_data),
                             &cbw_packet,
                             &mut csw_packet,
                         )
@@ -559,7 +554,7 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                         Self::handle_response_single(
                             write_ep,
                             CommandBlockStatus::CommandPassed,
-                            &write_data,
+                            Some(&write_data),
                             &cbw_packet,
                             &mut csw_packet,
                         )
@@ -580,7 +575,7 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                         Self::handle_response_single(
                             write_ep,
                             CommandBlockStatus::CommandPassed,
-                            &write_data,
+                            Some(&write_data),
                             &cbw_packet,
                             &mut csw_packet,
                         )
@@ -600,7 +595,7 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                         Self::handle_response_single(
                             write_ep,
                             CommandBlockStatus::CommandFailed,
-                            &[],
+                            None,
                             &cbw_packet,
                             &mut csw_packet,
                         )
@@ -608,12 +603,17 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                     }
                 };
 
-                // ループ内の処理をやりきれるケースはPhaseErrorが発生していないので、tagをクリア
-                phase_error_tag = None;
+                // Phase Error時の対応
+                if let Err(e) = send_resp_status {
+                    error!("Send Response Error: {:?}", e);
+                    // Phase Error時の対応用にtagを保持
+                    phase_error_tag = Some(cbw_packet.tag);
+                    break 'read_ep_loop;
+                }
             }
 
             if let Some(tag) = phase_error_tag {
-                error!("Phase Error");
+                error!("Phase Error Tag: {:#x}", tag);
                 // CSW で Phase Error を返す
                 let mut csw_packet = CommandStatusWrapperPacket::new();
                 csw_packet.tag = tag;
