@@ -11,14 +11,20 @@ use once_cell::sync::Lazy;
 use super::datatype::{LedState, MscDataTransferTag};
 
 /// Shared buffer manager for logical block buffer
-pub static LOGICAL_BLOCK_SHARED_BUFFERS: Lazy<
-    SharedBufferManager<MscDataTransferTag, LOGICAL_BLOCK_SIZE, LOGICAL_BLOCK_BUFFER_N>,
-> = Lazy::new(SharedBufferManager::new);
+pub static LOGICAL_BLOCK_SHARED_BUFFER_MANAGER: Lazy<
+    Mutex<
+        CriticalSectionRawMutex,
+        SharedBufferManager<MscDataTransferTag, LOGICAL_BLOCK_SIZE, LOGICAL_BLOCK_BUFFER_N>,
+    >,
+> = Lazy::new(|| Mutex::new(SharedBufferManager::new()));
 
 /// Shared buffer manager for NAND page buffer
-pub static NAND_PAGE_SHARED_BUFFERS: Lazy<
-    SharedBufferManager<MscDataTransferTag, NAND_PAGE_BUFFER_SIZE, NAND_PAGE_BUFFER_N>,
-> = Lazy::new(SharedBufferManager::new);
+pub static NAND_PAGE_SHARED_BUFFER_MANAGER: Lazy<
+    Mutex<
+        CriticalSectionRawMutex,
+        SharedBufferManager<MscDataTransferTag, NAND_PAGE_BUFFER_SIZE, NAND_PAGE_BUFFER_N>,
+    >,
+> = Lazy::new(|| Mutex::new(SharedBufferManager::new()));
 
 pub static CHANNEL_USB_TO_LEDCTRL: Channel<CriticalSectionRawMutex, LedState, CHANNEL_LEDCTRL_N> =
     Channel::new();
