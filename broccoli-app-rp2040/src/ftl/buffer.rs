@@ -36,6 +36,7 @@ pub struct SharedBufferManager<
     const BUFFER_N: usize,
 > {
     /// Shared buffer
+    /// TODO: SharedBufferManager自体がMutexを持っているので、buffersが個別にMutexを持っているが、親に束縛されている可能性がある。再考の余地あり
     pub buffers: [Mutex<CriticalSectionRawMutex, [u8; BUFFER_SIZE]>; BUFFER_N],
     /// Buffer status
     pub statuses: [Mutex<CriticalSectionRawMutex, [BufferStatus<AllocTag>; BUFFER_SIZE]>; BUFFER_N],
@@ -119,6 +120,21 @@ impl<AllocTag: Copy + Clone + Eq + PartialEq, const BUFFER_SIZE: usize, const BU
         None
     }
 
+    /// user_tag を取得
+    pub async fn user_tag(
+        &mut self,
+        id: BufferIdentify<AllocTag, BUFFER_SIZE>,
+    ) -> Option<AllocTag> {
+        crate::assert!(id.buf_index < BUFFER_N as u32);
+
+        // lock status
+        let status = self.statuses[id.buf_index as usize].lock().await;
+        match status.borrow()[0] {
+            BufferStatus::Busy { alloc_tag } => Some(alloc_tag),
+            _ => None,
+        }
+    }
+
     /// Free buffer
     pub async fn free(&mut self, id: BufferIdentify<AllocTag, BUFFER_SIZE>) {
         crate::assert!(id.buf_index < BUFFER_N as u32);
@@ -134,7 +150,7 @@ impl<AllocTag: Copy + Clone + Eq + PartialEq, const BUFFER_SIZE: usize, const BU
     }
 
     /// Get buffer body (mutable)
-    pub async fn get_buf(
+    pub async fn lock_buffer(
         &mut self,
         id: BufferIdentify<AllocTag, BUFFER_SIZE>,
     ) -> MutexGuard<'_, CriticalSectionRawMutex, [u8; BUFFER_SIZE]> {

@@ -76,23 +76,28 @@ async fn data_request_task() {
                 block_count,
             } => {
                 for block_index in 0..block_count {
-                    let mut buffer_manager = LOGICAL_BLOCK_SHARED_BUFFER_MANAGER.lock().await;
+                    let read_buf_id = {
+                        let mut buffer_manager = LOGICAL_BLOCK_SHARED_BUFFER_MANAGER.lock().await;
 
-                    // Allocate Shared Buffer
-                    let Some(read_buf_id) = buffer_manager
-                        .allocate_with_retry(
-                            req_tag,
-                            || async {
-                                Timer::after_micros(BUFFER_ALLOCATION_FAIL_RETRY_DURATION_US).await
-                            },
-                            BUFFER_ALLOCATION_FAIL_RETRY_COUNT_MAX,
-                        )
-                        .await
-                    else {
-                        crate::unreachable!(
-                            "allocate_with_retry failed for Read. req_tag: {:?}",
-                            req_tag
-                        );
+                        // Allocate Shared Buffer
+                        let Some(read_buf_id) = buffer_manager
+                            .allocate_with_retry(
+                                req_tag,
+                                || async {
+                                    Timer::after_micros(BUFFER_ALLOCATION_FAIL_RETRY_DURATION_US)
+                                        .await
+                                },
+                                BUFFER_ALLOCATION_FAIL_RETRY_COUNT_MAX,
+                            )
+                            .await
+                        else {
+                            crate::unreachable!(
+                                "allocate_with_retry failed for Read. req_tag: {:?}",
+                                req_tag
+                            );
+                        };
+
+                        read_buf_id
                     };
 
                     // 読み出し先決定
@@ -117,8 +122,9 @@ async fn data_request_task() {
                             .await;
                     } else {
                         // データをShared Bufferにコピー
+                        let mut buffer_manager = LOGICAL_BLOCK_SHARED_BUFFER_MANAGER.lock().await;
                         buffer_manager
-                            .get_buf(read_buf_id)
+                            .lock_buffer(read_buf_id)
                             .await
                             .copy_from_slice(&ram_disk[ram_offset..ram_offset + USB_BLOCK_SIZE]);
                         // 応答
@@ -138,16 +144,16 @@ async fn data_request_task() {
                 lba,
                 write_buf_id,
             } => {
-                // Get Buffer Body and Write Data
-
                 // 書き込み先決定
                 let ram_offset = lba * USB_BLOCK_SIZE;
                 // 範囲外応答
                 if ram_offset + USB_BLOCK_SIZE > ram_disk.len() {
                     crate::error!("Write out of range. lba: {}", lba);
                     // Bufferを解放
-                    let mut buffer_manager = LOGICAL_BLOCK_SHARED_BUFFER_MANAGER.lock().await;
-                    buffer_manager.free(write_buf_id).await;
+                    {
+                        let mut buffer_manager = LOGICAL_BLOCK_SHARED_BUFFER_MANAGER.lock().await;
+                        buffer_manager.free(write_buf_id).await;
+                    }
                     // 応答
                     CHANNEL_MSC_RESPONSE_TO_BULK
                         .send(DataResponse::Write {
@@ -156,12 +162,15 @@ async fn data_request_task() {
                         })
                         .await;
                 } else {
-                    let mut buffer_manager = LOGICAL_BLOCK_SHARED_BUFFER_MANAGER.lock().await;
-                    // データをRAM Diskにコピーしてから応答
-                    ram_disk[ram_offset..ram_offset + USB_BLOCK_SIZE]
-                        .copy_from_slice(buffer_manager.get_buf(write_buf_id).await.as_ref());
-                    // Bufferを解放
-                    buffer_manager.free(write_buf_id).await;
+                    {
+                        let mut buffer_manager = LOGICAL_BLOCK_SHARED_BUFFER_MANAGER.lock().await;
+                        // データをRAM Diskにコピーしてから応答
+                        ram_disk[ram_offset..ram_offset + USB_BLOCK_SIZE].copy_from_slice(
+                            buffer_manager.lock_buffer(write_buf_id).await.as_ref(),
+                        );
+                        // Bufferを解放
+                        buffer_manager.free(write_buf_id).await;
+                    }
                     // 応答
                     CHANNEL_MSC_RESPONSE_TO_BULK
                         .send(DataResponse::Write {
