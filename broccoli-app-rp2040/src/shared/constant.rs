@@ -20,6 +20,17 @@ pub const BUFFER_ALLOCATION_FAIL_RETRY_DURATION_US: u64 = 100;
 /// Buffer allocation fail retry count max
 pub const BUFFER_ALLOCATION_FAIL_RETRY_COUNT_MAX: u32 = 100;
 
+/// USB device number of blocks
+pub const USB_NUM_BLOCKS: usize = if DEBUG_ENABLE_RAM_DISK {
+    DEBUG_RAM_DISK_NUM_BLOCKS
+} else {
+    1024
+};
+/// USB device block size
+pub const USB_BLOCK_SIZE: usize = 512;
+/// USB device total size
+pub const USB_TOTAL_SIZE: usize = USB_NUM_BLOCKS * USB_BLOCK_SIZE;
+
 /// USB device vendor ID
 pub const USB_VID: u16 = 0xc0de;
 /// USB device product ID
@@ -32,24 +43,16 @@ pub const USB_PRODUCT: &str = "broccoli";
 pub const USB_SERIAL_NUMBER: &str = "snbroccoli";
 /// USB device maximum power consumption in mA
 pub const USB_MAX_POWER: u16 = 100;
-/// USB device maximum packet size
+/// USB device maximum packet size (USB_BLOCK_SIZE 分必要だが、 fullspeed, highspeedでは64byteまでしかサポートしない)
 pub const USB_MAX_PACKET_SIZE: u8 = 64;
+/// USB device packet count per logical block (512byte / 64byte = 8)
+pub const USB_PACKET_COUNT_PER_LOGICAL_BLOCK: u8 = USB_BLOCK_SIZE as u8 / USB_MAX_PACKET_SIZE;
 /// USB device vendor ID as a byte array
 pub const USB_VENDOR_ID: [u8; 8] = *b"broccoli";
 /// USB device product ID as a byte array
 pub const USB_PRODUCT_ID: [u8; 16] = *b"wipeseals devapp";
 /// USB device version as a byte array
 pub const USB_PRODUCT_DEVICE_VERSION: [u8; 4] = *b"0001";
-/// USB device number of blocks
-pub const USB_NUM_BLOCKS: usize = if DEBUG_ENABLE_RAM_DISK {
-    DEBUG_RAM_DISK_NUM_BLOCKS
-} else {
-    1024
-};
-/// USB device block size
-pub const USB_BLOCK_SIZE: usize = 512;
-/// USB device total size
-pub const USB_TOTAL_SIZE: usize = USB_NUM_BLOCKS * USB_BLOCK_SIZE;
 
 /// USB block size
 pub const LOGICAL_BLOCK_SIZE: usize = USB_BLOCK_SIZE;

@@ -413,7 +413,6 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
     }
 
     /// Main loop for bulk-only transport
-    /// TODO: 関数肥大化しているので、分割する
     pub async fn run(&mut self) -> ! {
         crate::assert!(self.read_ep.is_some());
         crate::assert!(self.write_ep.is_some());
@@ -579,7 +578,6 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                         .await
                     }
                     x if x == ScsiCommand::RequestSense as u8 => {
-                        debug!("Request Sense");
                         // Error reporting
                         if latest_sense_data.is_none() {
                             latest_sense_data = Some(RequestSenseData::from(
@@ -587,6 +585,7 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                                 AdditionalSenseCodeType::NoAdditionalSenseInformation,
                             ));
                         }
+                        debug!("Request Sense Data: {:#x}", latest_sense_data.unwrap());
 
                         let mut write_data = [0u8; REQUEST_SENSE_DATA_SIZE];
                         latest_sense_data.unwrap().prepare_to_buf(&mut write_data);
@@ -600,9 +599,9 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                         .await
                     }
                     x if x == ScsiCommand::Read10 as u8 => {
-                        debug!("Read 10");
                         // Read 10 data. resp variable data
                         let read10_data = Read10Command::from_data(scsi_commands);
+                        debug!("Read 10 Data: {:#x}", read10_data);
                         let lba = read10_data.lba as usize;
                         let transfer_length = read10_data.transfer_length as usize;
                         let req_tag = MscDataTransferTag::new(cbw_packet.tag, 0, 0);
@@ -637,28 +636,48 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                                         error!("Invalid Response: {:#x}", response);
                                         is_transfer_error = true;
                                         phase_error_tag = Some(cbw_packet.tag);
-                                        latest_sense_data =
-                                            Some(RequestSenseData::from_data_request_error(
-                                                error.unwrap(),
-                                            ));
+                                        latest_sense_data = if let Some(error) = error {
+                                            Some(RequestSenseData::from_data_request_error(error))
+                                        } else {
+                                            Some(RequestSenseData::from(
+                                                SenseKey::HardwareError,
+                                                AdditionalSenseCodeType::HardwareErrorEmbeddedSoftware,
+                                            ))
+                                        };
                                     }
 
-                                    // TODO: 外部から設定できると良い
-                                    let mut buffer_manager =
-                                        LOGICAL_BLOCK_SHARED_BUFFER_MANAGER.lock().await;
-                                    let read_buf = buffer_manager.lock_buffer(read_buf_id).await;
-                                    let read_data = read_buf.as_ref();
+                                    // TODO: mutex微妙
+                                    // let mut buffer_manager =
+                                    //     LOGICAL_BLOCK_SHARED_BUFFER_MANAGER.lock().await;
+                                    // let read_buf = buffer_manager.lock_buffer(read_buf_id).await;
+                                    // let read_data = read_buf.as_ref();
+
+                                    // test: TODO: Mutex良くないので、後で修正
+                                    let read_data = &[0u8; USB_BLOCK_SIZE];
+
                                     // transfer data
                                     debug!("Write Data: {:#x}", read_data);
-                                    let Ok(write_resp) = write_ep.write(read_data).await else {
-                                        error!("Write EP Error (Read 10)");
-                                        phase_error_tag = Some(cbw_packet.tag);
-                                        latest_sense_data = Some(RequestSenseData::from(
+                                    // USB FullSpeed/HighSpeedではpacket size=64byteまでしかサポートしないため分割
+                                    for packet_i in 0..USB_PACKET_COUNT_PER_LOGICAL_BLOCK {
+                                        let start_index = (packet_i * USB_MAX_PACKET_SIZE) as usize;
+                                        let end_index =
+                                            ((packet_i + 1) * USB_MAX_PACKET_SIZE) as usize;
+                                        // 範囲がUSB_BLOCK_SIZEを超えないように修正
+                                        let end_index = end_index.min(USB_BLOCK_SIZE);
+
+                                        // データを取り出して応答
+                                        let read_data = &read_data[start_index..end_index];
+                                        let Ok(write_resp) = write_ep.write(read_data).await else {
+                                            // TODO: Write EP Errorになる
+                                            error!("Write EP Error (Read 10)");
+                                            phase_error_tag = Some(cbw_packet.tag);
+                                            latest_sense_data = Some(RequestSenseData::from(
                                             SenseKey::IllegalRequest,
                                             AdditionalSenseCodeType::IllegalRequestInvalidCommand,
                                         ));
-                                        break 'read_ep_loop;
-                                    };
+                                            break 'read_ep_loop;
+                                        };
+                                    }
                                 }
                                 // Read処理中にRead以外の応答が来た場合は実装不具合
                                 _ => {

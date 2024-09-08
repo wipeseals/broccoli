@@ -19,6 +19,7 @@ use embassy_usb::{Builder, Config, Handler};
 use export::debug;
 use static_cell::StaticCell;
 
+use crate::ftl::buffer::BufferIdentify;
 use crate::ftl::request::{DataRequest, DataRequestError, DataResponse};
 use crate::shared::constant::*;
 use crate::shared::datatype::{LedState, MscDataTransferTag};
@@ -78,86 +79,94 @@ async fn data_request_task() {
             } => {
                 // block_count分のデータをRAM Diskから読み出してShared Bufferにコピー
                 // block_count=0の場合は何もしない
+                // let mut buffer_manager = LOGICAL_BLOCK_SHARED_BUFFER_MANAGER.lock().await; // TODO: 獲得できない
                 for block_index in 0..block_count {
-                    let read_buf_id = {
-                        // TODO: spinlockうまく行っていないかもしれない
-                        let mut buffer_manager = LOGICAL_BLOCK_SHARED_BUFFER_MANAGER.lock().await;
+                    // let read_buf_id = {
+                    //     // Allocate Shared Buffer
+                    //     let Some(read_buf_id) = buffer_manager
+                    //         .allocate_with_retry(
+                    //             req_tag,
+                    //             || async {
+                    //                 Timer::after_micros(BUFFER_ALLOCATION_FAIL_RETRY_DURATION_US)
+                    //                     .await
+                    //             },
+                    //             BUFFER_ALLOCATION_FAIL_RETRY_COUNT_MAX,
+                    //         )
+                    //         .await
+                    //     else {
+                    //         crate::unreachable!(
+                    //             "allocate_with_retry failed for Read. req_tag: {:?}",
+                    //             req_tag
+                    //         );
+                    //     };
 
-                        // Allocate Shared Buffer
-                        let Some(read_buf_id) = buffer_manager
-                            .allocate_with_retry(
-                                req_tag,
-                                || async {
-                                    Timer::after_micros(BUFFER_ALLOCATION_FAIL_RETRY_DURATION_US)
-                                        .await
-                                },
-                                BUFFER_ALLOCATION_FAIL_RETRY_COUNT_MAX,
-                            )
-                            .await
-                        else {
-                            crate::unreachable!(
-                                "allocate_with_retry failed for Read. req_tag: {:?}",
-                                req_tag
-                            );
-                        };
+                    //     read_buf_id
+                    // };
 
-                        read_buf_id
-                    };
+                    // test: TODO: Mutex良くないので、後で修正
+                    let read_buf_id = BufferIdentify::new(0, req_tag);
+                    CHANNEL_MSC_RESPONSE_TO_BULK
+                        .send(DataResponse::Read {
+                            req_tag,
+                            read_buf_id,
+                            transfer_count: block_index,
+                            error: None,
+                        })
+                        .await;
 
-                    // 読み出し先決定
-                    let ram_offset = (lba + block_index) * USB_BLOCK_SIZE;
-                    // 範囲外応答
-                    if ram_offset + USB_BLOCK_SIZE > ram_disk.len() {
-                        crate::error!(
-                            "Read out of range. lba: {}, block_index: {}",
-                            lba,
-                            block_index
-                        );
-                        // 応答
-                        CHANNEL_MSC_RESPONSE_TO_BULK
-                            .send(DataResponse::Read {
-                                req_tag,
-                                read_buf_id,
-                                transfer_count: block_index,
-                                error: Some(DataRequestError::OutOfRange {
-                                    lba: lba + block_index,
-                                }),
-                            })
-                            .await;
-                    } else {
-                        // データをShared Bufferにコピー
-                        let mut buffer_manager = LOGICAL_BLOCK_SHARED_BUFFER_MANAGER.lock().await;
-                        buffer_manager
-                            .lock_buffer(read_buf_id)
-                            .await
-                            .copy_from_slice(&ram_disk[ram_offset..ram_offset + USB_BLOCK_SIZE]);
-                        // 応答
-                        CHANNEL_MSC_RESPONSE_TO_BULK
-                            .send(DataResponse::Read {
-                                req_tag,
-                                read_buf_id,
-                                transfer_count: block_index,
-                                error: None,
-                            })
-                            .await;
-                    }
+                    //     // 読み出し先決定
+                    //     let ram_offset = (lba + block_index) * USB_BLOCK_SIZE;
+                    //     // 範囲外応答
+                    //     if ram_offset + USB_BLOCK_SIZE > ram_disk.len() {
+                    //         crate::error!(
+                    //             "Read out of range. lba: {}, block_index: {}",
+                    //             lba,
+                    //             block_index
+                    //         );
+                    //         // 応答
+                    //         CHANNEL_MSC_RESPONSE_TO_BULK
+                    //             .send(DataResponse::Read {
+                    //                 req_tag,
+                    //                 read_buf_id,
+                    //                 transfer_count: block_index,
+                    //                 error: Some(DataRequestError::OutOfRange {
+                    //                     lba: lba + block_index,
+                    //                 }),
+                    //             })
+                    //             .await;
+                    //     } else {
+                    //         // データをShared Bufferにコピー
+                    //         buffer_manager
+                    //             .lock_buffer(read_buf_id)
+                    //             .await
+                    //             .copy_from_slice(&ram_disk[ram_offset..ram_offset + USB_BLOCK_SIZE]);
+                    //         // 応答
+                    //         CHANNEL_MSC_RESPONSE_TO_BULK
+                    //             .send(DataResponse::Read {
+                    //                 req_tag,
+                    //                 read_buf_id,
+                    //                 transfer_count: block_index,
+                    //                 error: None,
+                    //             })
+                    //             .await;
+                    //     }
                 }
+                // drop(buffer_manager);
             }
             DataRequest::Write {
                 req_tag,
                 lba,
                 write_buf_id,
             } => {
+                let mut buffer_manager = LOGICAL_BLOCK_SHARED_BUFFER_MANAGER.lock().await;
+
                 // 書き込み先決定
                 let ram_offset = lba * USB_BLOCK_SIZE;
                 // 範囲外応答
                 if ram_offset + USB_BLOCK_SIZE > ram_disk.len() {
                     crate::error!("Write out of range. lba: {}", lba);
                     // Bufferを解放
-                    {
-                        let mut buffer_manager = LOGICAL_BLOCK_SHARED_BUFFER_MANAGER.lock().await;
-                        buffer_manager.free(write_buf_id).await;
-                    }
+                    buffer_manager.free(write_buf_id).await;
                     // 応答
                     CHANNEL_MSC_RESPONSE_TO_BULK
                         .send(DataResponse::Write {
@@ -166,15 +175,11 @@ async fn data_request_task() {
                         })
                         .await;
                 } else {
-                    {
-                        let mut buffer_manager = LOGICAL_BLOCK_SHARED_BUFFER_MANAGER.lock().await;
-                        // データをRAM Diskにコピーしてから応答
-                        ram_disk[ram_offset..ram_offset + USB_BLOCK_SIZE].copy_from_slice(
-                            buffer_manager.lock_buffer(write_buf_id).await.as_ref(),
-                        );
-                        // Bufferを解放
-                        buffer_manager.free(write_buf_id).await;
-                    }
+                    // データをRAM Diskにコピーしてから応答
+                    ram_disk[ram_offset..ram_offset + USB_BLOCK_SIZE]
+                        .copy_from_slice(buffer_manager.lock_buffer(write_buf_id).await.as_ref());
+                    // Bufferを解放
+                    buffer_manager.free(write_buf_id).await;
                     // 応答
                     CHANNEL_MSC_RESPONSE_TO_BULK
                         .send(DataResponse::Write {
@@ -183,6 +188,7 @@ async fn data_request_task() {
                         })
                         .await;
                 }
+                drop(buffer_manager);
             }
             DataRequest::Flush { req_tag } => {
                 // Flush
@@ -192,7 +198,7 @@ async fn data_request_task() {
                         req_tag,
                         error: None,
                     })
-                    .await
+                    .await;
             }
         };
     }
