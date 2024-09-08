@@ -395,7 +395,6 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
     ) -> Result<(), EndpointError> {
         if let Some(data) = write_data {
             // transfer data
-            debug!("Write Data: {:#x}", data);
             write_ep.write(data).await?;
             // update csw_packet.data_residue
             if data.len() < cbw_packet.data_transfer_length as usize {
@@ -408,7 +407,6 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
 
         // Status Transport
         let csw_data = csw_packet.to_data();
-        debug!("Send CSW: {:#x}", csw_packet);
         write_ep.write(&csw_data).await?;
 
         Ok(())
@@ -482,7 +480,6 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                     ));
                     break 'read_ep_loop;
                 };
-                debug!("Got CBW: {:#x}", cbw_packet);
 
                 // Prepare CSW
                 let mut csw_packet = CommandStatusWrapperPacket::new();
@@ -613,11 +610,9 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                         // Read data from FTL
                         // コマンド最適化のため、1要求に対し block_count 回の応答を返す
                         // block_count = 0 の場合は何も応答が帰ってこない
-                        self.data_request_sender.send(DataRequest::read(
-                            req_tag,
-                            lba,
-                            transfer_length,
-                        ));
+                        let data_request = DataRequest::read(req_tag, lba, transfer_length);
+                        debug!("Send DataRequest: {:#x}", data_request);
+                        self.data_request_sender.send(data_request).await;
 
                         // 内部からのRead応答を回収して、Bulk Outに書き込む
                         let mut is_transfer_error = false;
@@ -684,7 +679,6 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                                 (cbw_packet.data_transfer_length as usize - transfer_bytes) as u32;
                         }
                         let csw_data = csw_packet.to_data();
-                        debug!("Send CSW: {:#x}", csw_packet);
                         write_ep.write(&csw_data).await
                     }
                     _ => {

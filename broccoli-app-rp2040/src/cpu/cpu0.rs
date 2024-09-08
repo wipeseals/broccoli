@@ -46,6 +46,7 @@ async fn data_request_task() {
     //       とりあえず、RAM Diskパターンのみ実装するが、Executor二登録する関数単位で分けるといいかもしれない
     // RAM Disk Buffer for Debug
     let mut ram_disk = [0; USB_TOTAL_SIZE];
+    debug!("RAM Disk Size: {}", ram_disk.len());
 
     loop {
         let request = CHANNEL_MSC_TO_DATA_REQUEST.receive().await;
