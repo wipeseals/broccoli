@@ -80,6 +80,7 @@ async fn data_request_task() {
                 // block_count=0の場合は何もしない
                 for block_index in 0..block_count {
                     let read_buf_id = {
+                        // TODO: spinlockうまく行っていないかもしれない
                         let mut buffer_manager = LOGICAL_BLOCK_SHARED_BUFFER_MANAGER.lock().await;
 
                         // Allocate Shared Buffer
