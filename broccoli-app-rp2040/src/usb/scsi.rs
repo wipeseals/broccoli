@@ -1,5 +1,7 @@
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 
+use crate::ftl::request::DataRequestError;
+
 /// SCSI command codes
 #[repr(u8)]
 pub enum ScsiCommand {
@@ -271,6 +273,45 @@ impl RequestSenseData {
             bit_pointer: 0,
             field_pointer: 0,
             reserved: 0,
+        }
+    }
+
+    /// Create RequestSenseData (Scsi specified) from DataRequestError (Internal)
+    pub fn from_data_request_error(data_request_error: DataRequestError) -> Self {
+        match data_request_error {
+            DataRequestError::NoError => Self::new(),
+            DataRequestError::General => Self::from(
+                SenseKey::HardwareError,
+                AdditionalSenseCodeType::HardwareErrorGeneral,
+            ),
+            DataRequestError::BufferAllocationFail => Self::from(
+                SenseKey::VendorSpecific,
+                AdditionalSenseCodeType::HardwareErrorEmbeddedSoftware,
+            ),
+            DataRequestError::NandError => Self::from(
+                SenseKey::HardwareError,
+                AdditionalSenseCodeType::HardwareErrorGeneral,
+            ),
+            DataRequestError::InvalidRequest => Self::from(
+                SenseKey::IllegalRequest,
+                AdditionalSenseCodeType::IllegalRequestInvalidCommand,
+            ),
+            DataRequestError::DataError => Self::from(
+                SenseKey::HardwareError,
+                AdditionalSenseCodeType::HardwareErrorGeneral,
+            ),
+            DataRequestError::NoData => Self::from(
+                SenseKey::HardwareError,
+                AdditionalSenseCodeType::HardwareErrorGeneral,
+            ),
+            DataRequestError::OutOfRange { lba } => Self::from(
+                SenseKey::IllegalRequest,
+                AdditionalSenseCodeType::IllegalRequestInParameters,
+            ),
+            DataRequestError::NotImplemented => Self::from(
+                SenseKey::IllegalRequest,
+                AdditionalSenseCodeType::HardwareErrorEmbeddedSoftware,
+            ),
         }
     }
 
@@ -553,6 +594,7 @@ pub struct Read10Command {
     /// byte6: Group Number
     pub group_number: u8,
     /// byte7-8: Transfer Length
+    ///          0が指定された場合はRead対象はないがエラーにはならない
     pub transfer_length: u16,
     /// byte9: Normal ACA
     /// 0: Normal, 1: Normal ACA (ACA is enabled)

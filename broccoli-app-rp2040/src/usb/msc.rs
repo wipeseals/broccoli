@@ -1,4 +1,5 @@
 use core::borrow::{Borrow, BorrowMut};
+use core::f32::consts::E;
 use core::fmt::Error;
 
 use byteorder::{ByteOrder, LittleEndian};
@@ -27,6 +28,7 @@ use crate::ftl::buffer::{BufferIdentify, BufferStatus};
 use crate::ftl::request::{DataRequest, DataResponse};
 use crate::shared::constant::*;
 use crate::shared::datatype::MscDataTransferTag;
+use crate::shared::resouce::LOGICAL_BLOCK_SHARED_BUFFER_MANAGER;
 use crate::usb::scsi::*;
 
 // interfaceClass: 0x08 (Mass Storage)
@@ -439,26 +441,45 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                     break 'read_ep_loop;
                 }
 
+                // clear latest sense data
+                latest_sense_data = None;
+
                 // Command Transport
                 let mut read_buf = [0u8; USB_BLOCK_SIZE]; // read buffer分確保
                 let Ok(read_cbw_size) = read_ep.read(&mut read_buf).await else {
                     error!("Read EP Error (CBW)");
                     phase_error_tag = None; // unknown tag
+                    latest_sense_data = Some(RequestSenseData::from(
+                        SenseKey::IllegalRequest,
+                        AdditionalSenseCodeType::IllegalRequestInvalidCommand,
+                    ));
                     break 'read_ep_loop;
                 };
                 let Some(cbw_packet) = CommandBlockWrapperPacket::from_data(&read_buf) else {
                     error!("Invalid CBW: {:#x}", read_buf);
                     phase_error_tag = None; // unknown tag
+                    latest_sense_data = Some(RequestSenseData::from(
+                        SenseKey::IllegalRequest,
+                        AdditionalSenseCodeType::IllegalRequestInvalidCommand,
+                    ));
                     break 'read_ep_loop;
                 };
                 if !cbw_packet.is_valid_signature() {
                     error!("Invalid CBW signature: {:#x}", cbw_packet);
                     phase_error_tag = None; // unknown tag
+                    latest_sense_data = Some(RequestSenseData::from(
+                        SenseKey::IllegalRequest,
+                        AdditionalSenseCodeType::IllegalRequestInParameters,
+                    ));
                     break 'read_ep_loop;
                 };
                 if cbw_packet.command_length == 0 {
                     error!("Invalid CBW command length: {:#x}", cbw_packet);
                     phase_error_tag = None; // unknown tag
+                    latest_sense_data = Some(RequestSenseData::from(
+                        SenseKey::IllegalRequest,
+                        AdditionalSenseCodeType::IllegalRequestInParameters,
+                    ));
                     break 'read_ep_loop;
                 };
                 debug!("Got CBW: {:#x}", cbw_packet);
@@ -581,9 +602,91 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                         )
                         .await
                     }
-                    // x if x == ScsiCommand::Read10 as u8 => {
-                    //     debug!("Read 10");
-                    // }
+                    x if x == ScsiCommand::Read10 as u8 => {
+                        debug!("Read 10");
+                        // Read 10 data. resp variable data
+                        let read10_data = Read10Command::from_data(scsi_commands);
+                        let lba = read10_data.lba as usize;
+                        let transfer_length = read10_data.transfer_length as usize;
+                        let req_tag = MscDataTransferTag::new(cbw_packet.tag, 0, 0);
+
+                        // Read data from FTL
+                        // コマンド最適化のため、1要求に対し block_count 回の応答を返す
+                        // block_count = 0 の場合は何も応答が帰ってこない
+                        self.data_request_sender.send(DataRequest::read(
+                            req_tag,
+                            lba,
+                            transfer_length,
+                        ));
+
+                        // 内部からのRead応答を回収して、Bulk Outに書き込む
+                        let mut is_transfer_error = false;
+                        for current_transfer_index in 0..transfer_length {
+                            let response = self.data_response_receiver.receive().await;
+                            match response {
+                                // Read Response
+                                // req_tag一致, transfer_count一致, error無しが正常ケース
+                                DataResponse::Read {
+                                    req_tag: resp_tag,
+                                    read_buf_id,
+                                    transfer_count,
+                                    error,
+                                } => {
+                                    debug!("Read Response: {:#x}", read_buf_id);
+
+                                    // Check if the response is valid
+                                    let invalid_params = (req_tag != resp_tag)
+                                        || (transfer_count != current_transfer_index);
+                                    let error_occurred = error.is_some();
+                                    if invalid_params || error_occurred {
+                                        error!("Invalid Response: {:#x}", response);
+                                        is_transfer_error = true;
+                                        phase_error_tag = Some(cbw_packet.tag);
+                                        latest_sense_data =
+                                            Some(RequestSenseData::from_data_request_error(
+                                                error.unwrap(),
+                                            ));
+                                    }
+
+                                    // TODO: 外部から設定できると良い
+                                    let mut buffer_manager =
+                                        LOGICAL_BLOCK_SHARED_BUFFER_MANAGER.lock().await;
+                                    let read_buf = buffer_manager.lock_buffer(read_buf_id).await;
+                                    let read_data = read_buf.as_ref();
+                                    // transfer data
+                                    debug!("Write Data: {:#x}", read_data);
+                                    let Ok(write_resp) = write_ep.write(read_data).await else {
+                                        error!("Write EP Error (Read 10)");
+                                        phase_error_tag = Some(cbw_packet.tag);
+                                        latest_sense_data = Some(RequestSenseData::from(
+                                            SenseKey::IllegalRequest,
+                                            AdditionalSenseCodeType::IllegalRequestInvalidCommand,
+                                        ));
+                                        break 'read_ep_loop;
+                                    };
+                                }
+                                // Read処理中にRead以外の応答が来た場合は実装不具合
+                                _ => {
+                                    crate::unreachable!("Invalid Response: {:#x}", response);
+                                }
+                            }
+                        }
+
+                        // CSW 応答
+                        csw_packet.status = if !is_transfer_error {
+                            CommandBlockStatus::CommandPassed
+                        } else {
+                            CommandBlockStatus::CommandFailed
+                        };
+                        let transfer_bytes = transfer_length * self.config.block_size;
+                        if transfer_bytes < cbw_packet.data_transfer_length as usize {
+                            csw_packet.data_residue =
+                                (cbw_packet.data_transfer_length as usize - transfer_bytes) as u32;
+                        }
+                        let csw_data = csw_packet.to_data();
+                        debug!("Send CSW: {:#x}", csw_packet);
+                        write_ep.write(&csw_data).await
+                    }
                     _ => {
                         error!("Unsupported Command: {:#x}", scsi_command);
                         // save latest sense data

@@ -12,11 +12,12 @@ pub enum DataRequest<ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usi
 
     /// Read Request
     /// 指定されたLBAから指定されたブロック数を読み出す。1要求に対しblock_count回数分の応答が返る
+    /// 応答する順序は保証する。必ずLBAの順に応答する
     /// DataBufferは連続読み出しを想定し、それぞれ確保して応答に含める。応答に乗せた時点でBufferの所有権は移動する
     Read {
         req_tag: ReqTag,
         lba: usize,
-        block_count: usize,
+        transfer_length: usize,
     },
 
     /// Write Request
@@ -35,6 +36,7 @@ pub enum DataRequest<ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usi
 /// Internal Transfer Error Code
 #[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
 pub enum DataRequestError {
+    NoError,
     General,
     BufferAllocationFail,
     NandError,
@@ -66,7 +68,7 @@ pub enum DataResponse<ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: us
     Read {
         req_tag: ReqTag,
         read_buf_id: BufferIdentify<ReqTag, DATA_SIZE>,
-        data_count: usize,
+        transfer_count: usize,
         error: Option<DataRequestError>,
     },
 
@@ -90,11 +92,11 @@ impl<ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usize> DataRequest<
         Self::Echo { req_tag }
     }
 
-    pub fn read(req_tag: ReqTag, lba: usize, block_count: usize) -> Self {
+    pub fn read(req_tag: ReqTag, lba: usize, transfer_length: usize) -> Self {
         Self::Read {
             req_tag,
             lba,
-            block_count,
+            transfer_length,
         }
     }
 
@@ -131,7 +133,7 @@ impl<ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usize>
         Self::Read {
             req_tag,
             read_buf_id,
-            data_count,
+            transfer_count: data_count,
             error,
         }
     }

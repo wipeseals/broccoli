@@ -73,8 +73,10 @@ async fn data_request_task() {
             DataRequest::Read {
                 req_tag,
                 lba,
-                block_count,
+                transfer_length: block_count,
             } => {
+                // block_count分のデータをRAM Diskから読み出してShared Bufferにコピー
+                // block_count=0の場合は何もしない
                 for block_index in 0..block_count {
                     let read_buf_id = {
                         let mut buffer_manager = LOGICAL_BLOCK_SHARED_BUFFER_MANAGER.lock().await;
@@ -114,7 +116,7 @@ async fn data_request_task() {
                             .send(DataResponse::Read {
                                 req_tag,
                                 read_buf_id,
-                                data_count: block_index,
+                                transfer_count: block_index,
                                 error: Some(DataRequestError::OutOfRange {
                                     lba: lba + block_index,
                                 }),
@@ -132,7 +134,7 @@ async fn data_request_task() {
                             .send(DataResponse::Read {
                                 req_tag,
                                 read_buf_id,
-                                data_count: block_index,
+                                transfer_count: block_index,
                                 error: None,
                             })
                             .await;
