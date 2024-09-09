@@ -11,9 +11,9 @@ pub const CHANNEL_LEDCTRL_N: usize = 1;
 /// USB Control Transfer to Bulk Transfer channel size
 pub const CHANNEL_CTRL_TO_BULK_N: usize = 2;
 /// USB Bulk Transfer to Internal Request channel size
-pub const CHANNEL_BULK_TO_DATA_REQUEST_N: usize = 4;
+pub const CHANNEL_BULK_TO_DATA_REQUEST_N: usize = 2;
 /// USB Internal Request to Bulk Transfer channel size
-pub const CHANNEL_DATA_RESPONSE_TO_BULK_N: usize = 4;
+pub const CHANNEL_DATA_RESPONSE_TO_BULK_N: usize = 2;
 
 /// Buffer allocation fail retry duration in microseconds
 pub const BUFFER_ALLOCATION_FAIL_RETRY_DURATION_US: u64 = 100;
@@ -43,7 +43,7 @@ pub const USB_PRODUCT: &str = "broccoli";
 pub const USB_SERIAL_NUMBER: &str = "snbroccoli";
 /// USB device maximum power consumption in mA
 pub const USB_MAX_POWER: u16 = 100;
-/// USB device maximum packet size (USB_BLOCK_SIZE 分必要だが、 fullspeed, highspeedでは64byteまでしかサポートしない)
+/// USB device maximum packet size
 pub const USB_MAX_PACKET_SIZE: u8 = 64;
 /// USB device packet count per logical block (512byte / 64byte = 8)
 pub const USB_PACKET_COUNT_PER_LOGICAL_BLOCK: u8 = USB_BLOCK_SIZE as u8 / USB_MAX_PACKET_SIZE;

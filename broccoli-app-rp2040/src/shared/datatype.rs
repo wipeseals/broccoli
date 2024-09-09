@@ -4,18 +4,12 @@ pub struct MscDataTransferTag {
     /// CBW dCBWTag
     cbw_tag: u32,
     /// sequence number
-    seq_num: u32,
-    /// num of request/response
-    msg_num: u32,
+    seq_num: usize,
 }
 
 impl MscDataTransferTag {
-    pub fn new(cbw_tag: u32, seq_num: u32, msg_num: u32) -> Self {
-        Self {
-            cbw_tag,
-            seq_num,
-            msg_num,
-        }
+    pub fn new(cbw_tag: u32, seq_num: usize) -> Self {
+        Self { cbw_tag, seq_num }
     }
 }
 /// LED Illumination State

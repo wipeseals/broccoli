@@ -1,8 +1,6 @@
-use super::buffer::BufferIdentify;
-
 /// Data Transfer Request ID
-#[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
-pub enum DataRequest<ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usize> {
+#[derive(Eq, PartialEq, defmt::Format)]
+pub enum DataRequest<'buffer, ReqTag: Eq + PartialEq, const DATA_SIZE: usize> {
     /// Setup Request
     /// 初期化時に使用する。NAND IOやDMACなどの初期化を行う。これの応答まではUSB Endpointを有効にしない
     Setup { req_tag: ReqTag },
@@ -11,22 +9,19 @@ pub enum DataRequest<ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usi
     Echo { req_tag: ReqTag },
 
     /// Read Request
-    /// 指定されたLBAから指定されたブロック数を読み出す。1要求に対しblock_count回数分の応答が返る
-    /// 応答する順序は保証する。必ずLBAの順に応答する
-    /// DataBufferは連続読み出しを想定し、それぞれ確保して応答に含める。応答に乗せた時点でBufferの所有権は移動する
+    /// 指定されたLBAのデータを返す。1要求に対し1回の応答が返る
     Read {
         req_tag: ReqTag,
         lba: usize,
-        transfer_length: usize,
+        read_buf: &'buffer mut [u8; DATA_SIZE],
     },
 
     /// Write Request
     /// 指定されたLBAに指定されたBufferのデータを書き込む。1要求に対し1回の応答が返る
-    /// 内部のWriteBufferに乗せた時点で応答を返しても良い。ただし、あとからFlushを要求された場合は、その時点で書き込みを行う
     Write {
         req_tag: ReqTag,
         lba: usize,
-        write_buf_id: BufferIdentify<ReqTag, DATA_SIZE>,
+        write_buf: &'buffer [u8; DATA_SIZE],
     },
 
     /// Flush Request
@@ -49,66 +44,59 @@ pub enum DataRequestError {
 
 /// Internal Transfer Response
 #[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
-pub enum DataResponse<ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usize> {
+pub enum DataResponse<'buffer, ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usize> {
     /// Setup Response
-    /// Setup Requestに対する応答
     Setup {
         req_tag: ReqTag,
         error: Option<DataRequestError>,
     },
     /// Echo Response
-    /// Echo Requestに対する応答
     Echo {
         req_tag: ReqTag,
         error: Option<DataRequestError>,
     },
 
     /// Read Response
-    /// Read Requestに対する応答。応答を受信した側が、受信してデータを処理した時点でBufferの所有権を放棄する
     Read {
         req_tag: ReqTag,
-        read_buf_id: BufferIdentify<ReqTag, DATA_SIZE>,
-        transfer_count: usize,
         error: Option<DataRequestError>,
+        read_buf: &'buffer [u8; DATA_SIZE],
     },
 
     /// Write Response
-    /// Write Requestに対する応答。応答を送信する側が、送信時点でBufferの所有権を放棄する
     Write {
         req_tag: ReqTag,
         error: Option<DataRequestError>,
+        write_buf: &'buffer [u8; DATA_SIZE],
     },
 
     /// Flush Response
-    /// Flush Requestに対する応答
     Flush {
         req_tag: ReqTag,
         error: Option<DataRequestError>,
     },
 }
 
-impl<ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usize> DataRequest<ReqTag, DATA_SIZE> {
+impl<'a, ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usize>
+    DataRequest<'a, ReqTag, DATA_SIZE>
+{
     pub fn echo(req_tag: ReqTag) -> Self {
         Self::Echo { req_tag }
     }
 
-    pub fn read(req_tag: ReqTag, lba: usize, transfer_length: usize) -> Self {
+    pub fn read(req_tag: ReqTag, lba: usize, read_buf: &'a mut [u8; DATA_SIZE]) -> Self {
         Self::Read {
             req_tag,
             lba,
-            transfer_length,
+            read_buf,
         }
     }
 
-    pub fn write(
-        req_tag: ReqTag,
-        lba: usize,
-        write_buf_id: BufferIdentify<ReqTag, DATA_SIZE>,
-    ) -> Self {
+    pub fn write(req_tag: ReqTag, lba: usize, write_buf: &'a [u8; DATA_SIZE]) -> Self {
         Self::Write {
             req_tag,
             lba,
-            write_buf_id,
+            write_buf,
         }
     }
 
@@ -117,8 +105,8 @@ impl<ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usize> DataRequest<
     }
 }
 
-impl<ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usize>
-    DataResponse<ReqTag, DATA_SIZE>
+impl<'buffer, ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usize>
+    DataResponse<'buffer, ReqTag, DATA_SIZE>
 {
     pub fn echo(req_tag: ReqTag, error: Option<DataRequestError>) -> Self {
         Self::Echo { req_tag, error }
@@ -126,20 +114,26 @@ impl<ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usize>
 
     pub fn read(
         req_tag: ReqTag,
-        read_buf_id: BufferIdentify<ReqTag, DATA_SIZE>,
-        data_count: usize,
         error: Option<DataRequestError>,
+        read_buf: &'buffer [u8; DATA_SIZE],
     ) -> Self {
         Self::Read {
             req_tag,
-            read_buf_id,
-            transfer_count: data_count,
             error,
+            read_buf,
         }
     }
 
-    pub fn write(req_tag: ReqTag, error: Option<DataRequestError>) -> Self {
-        Self::Write { req_tag, error }
+    pub fn write(
+        req_tag: ReqTag,
+        error: Option<DataRequestError>,
+        write_buf: &'buffer [u8; DATA_SIZE],
+    ) -> Self {
+        Self::Write {
+            req_tag,
+            error,
+            write_buf,
+        }
     }
 
     pub fn flush(req_tag: ReqTag, error: Option<DataRequestError>) -> Self {

@@ -24,11 +24,9 @@ use embassy_usb::{Builder, Config, Handler};
 use export::debug;
 use static_cell::StaticCell;
 
-use crate::ftl::buffer::{BufferIdentify, BufferStatus};
 use crate::ftl::request::{DataRequest, DataResponse};
 use crate::shared::constant::*;
 use crate::shared::datatype::MscDataTransferTag;
-use crate::shared::resouce::LOGICAL_BLOCK_SHARED_BUFFER_MANAGER;
 use crate::usb::scsi::*;
 
 // interfaceClass: 0x08 (Mass Storage)
@@ -93,6 +91,25 @@ enum CommandBlockStatus {
     CommandFailed = 0x01,
     PhaseError = 0x02,
     Reserved { value: u8 },
+}
+
+impl CommandBlockStatus {
+    fn from_u8(value: u8) -> Self {
+        match value {
+            0x00 => CommandBlockStatus::CommandPassed,
+            0x01 => CommandBlockStatus::CommandFailed,
+            0x02 => CommandBlockStatus::PhaseError,
+            _ => CommandBlockStatus::Reserved { value },
+        }
+    }
+
+    fn from_bool(value: bool) -> Self {
+        if value {
+            CommandBlockStatus::CommandPassed
+        } else {
+            CommandBlockStatus::CommandFailed
+        }
+    }
 }
 impl CommandBlockWrapperPacket {
     fn new() -> Self {
@@ -235,11 +252,11 @@ pub enum BulkTransferRequest {
 /// USB Mass Storage Class Control Handler
 /// This handler is used to handle the control requests for the Mass Storage Class.
 /// It supports the Mass Storage Reset and Get Max LUN requests.
-pub struct MscCtrlHandler<'d> {
+pub struct MscCtrlHandler<'channel> {
     /// Interface Number
     if_num: InterfaceNumber,
     /// Bulk Transfer Request Sender (for Mass Storage Reset)
-    bulk_request_sender: DynamicSender<'d, BulkTransferRequest>,
+    bulk_request_sender: DynamicSender<'channel, BulkTransferRequest>,
 }
 
 /// USB Mass Storage Class Bulk Handler Configuration
@@ -253,24 +270,26 @@ pub struct MscBulkHandlerConfig {
 
 /// USB Mass Storage Class Bulk Handler
 /// This handler is used to handle the bulk transfers for the Mass Storage Class.
-pub struct MscBulkHandler<'d, D: Driver<'d>> {
+pub struct MscBulkHandler<'driver, 'channel, 'buffer, D: Driver<'driver>> {
     /// Bulk Transfer Request Receiver (for Mass Storage Reset)
-    ctrl_to_bulk_request_receiver: DynamicReceiver<'d, BulkTransferRequest>,
+    ctrl_to_bulk_request_receiver: DynamicReceiver<'channel, BulkTransferRequest>,
     /// Bulk Endpoint Out
-    read_ep: Option<<D as Driver<'d>>::EndpointOut>,
+    read_ep: Option<<D as Driver<'driver>>::EndpointOut>,
     /// Bulk Endpoint In
-    write_ep: Option<<D as Driver<'d>>::EndpointIn>,
+    write_ep: Option<<D as Driver<'driver>>::EndpointIn>,
 
     /// Config
     config: MscBulkHandlerConfig,
 
     /// Request Read/Write to Flash Translation Layer
-    data_request_sender: DynamicSender<'d, DataRequest<MscDataTransferTag, USB_BLOCK_SIZE>>,
+    data_request_sender:
+        DynamicSender<'channel, DataRequest<'buffer, MscDataTransferTag, USB_BLOCK_SIZE>>,
     /// Response Read/Write from Flash Translation Layer
-    data_response_receiver: DynamicReceiver<'d, DataResponse<MscDataTransferTag, USB_BLOCK_SIZE>>,
+    data_response_receiver:
+        DynamicReceiver<'channel, DataResponse<'buffer, MscDataTransferTag, USB_BLOCK_SIZE>>,
 }
 
-impl<'d> Handler for MscCtrlHandler<'d> {
+impl<'channel> Handler for MscCtrlHandler<'channel> {
     fn control_out<'a>(&'a mut self, req: Request, buf: &'a [u8]) -> Option<OutResponse> {
         debug!("Got control_out, request={}, buf={:a}", req, buf);
         None
@@ -312,20 +331,22 @@ impl<'d> Handler for MscCtrlHandler<'d> {
     }
 }
 
-impl<'d> MscCtrlHandler<'d> {
-    pub fn new(bulk_request_sender: DynamicSender<'d, BulkTransferRequest>) -> Self {
+impl<'channel> MscCtrlHandler<'channel> {
+    pub fn new(bulk_request_sender: DynamicSender<'channel, BulkTransferRequest>) -> Self {
         Self {
             if_num: InterfaceNumber(0),
             bulk_request_sender,
         }
     }
 
-    pub fn build<'a, D: Driver<'d>>(
-        &'d mut self,
-        builder: &mut Builder<'d, D>,
-        config: Config<'d>,
-        bulk_handler: &'a mut MscBulkHandler<'d, D>,
-    ) {
+    pub fn build<'a, 'driver, 'buffer, D: Driver<'driver>>(
+        &'channel mut self,
+        builder: &mut Builder<'driver, D>,
+        config: Config<'channel>,
+        bulk_handler: &'a mut MscBulkHandler<'driver, 'channel, 'buffer, D>,
+    ) where
+        'channel: 'driver,
+    {
         // Bulk Only Transport for Mass Storage
         let mut function = builder.function(
             MSC_INTERFACE_CLASS,
@@ -365,14 +386,17 @@ impl MscBulkHandlerConfig {
     }
 }
 
-impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
+impl<'driver, 'channel, 'buffer, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, 'buffer, D> {
     pub fn new(
         config: MscBulkHandlerConfig,
-        ctrl_to_bulk_request_receiver: DynamicReceiver<'d, BulkTransferRequest>,
-        data_request_sender: DynamicSender<'d, DataRequest<MscDataTransferTag, USB_BLOCK_SIZE>>,
+        ctrl_to_bulk_request_receiver: DynamicReceiver<'channel, BulkTransferRequest>,
+        data_request_sender: DynamicSender<
+            'channel,
+            DataRequest<'buffer, MscDataTransferTag, USB_BLOCK_SIZE>,
+        >,
         data_response_receiver: DynamicReceiver<
-            'd,
-            DataResponse<MscDataTransferTag, USB_BLOCK_SIZE>,
+            'channel,
+            DataResponse<'buffer, MscDataTransferTag, USB_BLOCK_SIZE>,
         >,
     ) -> Self {
         Self {
@@ -387,7 +411,7 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
 
     /// Handle response for simple command
     async fn handle_response_single(
-        write_ep: &mut <D as Driver<'d>>::EndpointIn,
+        write_ep: &mut <D as Driver<'driver>>::EndpointIn,
         status: CommandBlockStatus,
         write_data: Option<&[u8]>,
         cbw_packet: &CommandBlockWrapperPacket,
@@ -407,6 +431,7 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
 
         // Status Transport
         let csw_data = csw_packet.to_data();
+        debug!("Send CSW: {:#x}", csw_packet);
         write_ep.write(&csw_data).await?;
 
         Ok(())
@@ -604,60 +629,42 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                         debug!("Read 10 Data: {:#x}", read10_data);
                         let lba = read10_data.lba as usize;
                         let transfer_length = read10_data.transfer_length as usize;
-                        let req_tag = MscDataTransferTag::new(cbw_packet.tag, 0, 0);
 
-                        // Read data from FTL
-                        // コマンド最適化のため、1要求に対し block_count 回の応答を返す
-                        // block_count = 0 の場合は何も応答が帰ってこない
-                        let data_request = DataRequest::read(req_tag, lba, transfer_length);
-                        debug!("Send DataRequest: {:#x}", data_request);
-                        self.data_request_sender.send(data_request).await;
+                        for transfer_index in 0..transfer_length {
+                            let mut read10_buf = [0u8; USB_BLOCK_SIZE];
+                            let req_tag = MscDataTransferTag::new(cbw_packet.tag, transfer_index);
+                            let data_request = DataRequest::read(req_tag, lba, &mut read10_buf);
 
-                        // 内部からのRead応答を回収して、Bulk Outに書き込む
-                        let mut is_transfer_error = false;
-                        for current_transfer_index in 0..transfer_length {
+                            debug!("Send DataRequest: {:#x}", data_request);
+                            self.data_request_sender.send(data_request).await;
+
                             let response = self.data_response_receiver.receive().await;
+                            debug!("Receive DataResponse: {:#x}", response);
+
                             match response {
                                 // Read Response
                                 // req_tag一致, transfer_count一致, error無しが正常ケース
                                 DataResponse::Read {
                                     req_tag: resp_tag,
-                                    read_buf_id,
-                                    transfer_count,
+                                    read_buf: read10_buf,
                                     error,
                                 } => {
-                                    debug!("Read Response: {:#x}", read_buf_id);
-
                                     // Check if the response is valid
-                                    let invalid_params = (req_tag != resp_tag)
-                                        || (transfer_count != current_transfer_index);
-                                    let error_occurred = error.is_some();
-                                    if invalid_params || error_occurred {
+                                    if (req_tag != resp_tag) {
                                         error!("Invalid Response: {:#x}", response);
-                                        is_transfer_error = true;
-                                        phase_error_tag = Some(cbw_packet.tag);
-                                        latest_sense_data = if let Some(error) = error {
-                                            Some(RequestSenseData::from_data_request_error(error))
-                                        } else {
-                                            Some(RequestSenseData::from(
-                                                SenseKey::HardwareError,
-                                                AdditionalSenseCodeType::HardwareErrorEmbeddedSoftware,
-                                            ))
-                                        };
+                                        latest_sense_data = Some(RequestSenseData::from(
+                                            SenseKey::HardwareError,
+                                            AdditionalSenseCodeType::HardwareErrorEmbeddedSoftware,
+                                        ));
+                                    }
+                                    // Check if there is an error
+                                    if let Some(error) = error {
+                                        error!("Invalid Response: {:#x}", response);
+                                        latest_sense_data =
+                                            Some(RequestSenseData::from_data_request_error(error));
                                     }
 
-                                    // TODO: mutex微妙
-                                    // let mut buffer_manager =
-                                    //     LOGICAL_BLOCK_SHARED_BUFFER_MANAGER.lock().await;
-                                    // let read_buf = buffer_manager.lock_buffer(read_buf_id).await;
-                                    // let read_data = read_buf.as_ref();
-
-                                    // test: TODO: Mutex良くないので、後で修正
-                                    let read_data = &[0u8; USB_BLOCK_SIZE];
-
-                                    // transfer data
-                                    debug!("Write Data: {:#x}", read_data);
-                                    // USB FullSpeed/HighSpeedではpacket size=64byteまでしかサポートしないため分割
+                                    // transfer read data
                                     for packet_i in 0..USB_PACKET_COUNT_PER_LOGICAL_BLOCK {
                                         let start_index = (packet_i * USB_MAX_PACKET_SIZE) as usize;
                                         let end_index =
@@ -666,7 +673,7 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                                         let end_index = end_index.min(USB_BLOCK_SIZE);
 
                                         // データを取り出して応答
-                                        let read_data = &read_data[start_index..end_index];
+                                        let read_data = &read10_buf[start_index..end_index];
                                         let Ok(write_resp) = write_ep.write(read_data).await else {
                                             // TODO: Write EP Errorになる
                                             error!("Write EP Error (Read 10)");
@@ -687,17 +694,15 @@ impl<'d, D: Driver<'d>> MscBulkHandler<'d, D> {
                         }
 
                         // CSW 応答
-                        csw_packet.status = if !is_transfer_error {
-                            CommandBlockStatus::CommandPassed
-                        } else {
-                            CommandBlockStatus::CommandFailed
-                        };
+                        csw_packet.status =
+                            CommandBlockStatus::from_bool(latest_sense_data.is_none());
                         let transfer_bytes = transfer_length * self.config.block_size;
                         if transfer_bytes < cbw_packet.data_transfer_length as usize {
                             csw_packet.data_residue =
                                 (cbw_packet.data_transfer_length as usize - transfer_bytes) as u32;
                         }
                         let csw_data = csw_packet.to_data();
+                        debug!("Send CSW: {:#x}", csw_packet);
                         write_ep.write(&csw_data).await
                     }
                     _ => {
