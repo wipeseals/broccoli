@@ -77,14 +77,14 @@ pub enum DataResponse<'buffer, ReqTag: Copy + Clone + Eq + PartialEq, const DATA
     },
 }
 
-impl<'a, ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usize>
-    DataRequest<'a, ReqTag, DATA_SIZE>
+impl<'buffer, ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usize>
+    DataRequest<'buffer, ReqTag, DATA_SIZE>
 {
     pub fn echo(req_tag: ReqTag) -> Self {
         Self::Echo { req_tag }
     }
 
-    pub fn read(req_tag: ReqTag, lba: usize, read_buf: &'a mut [u8; DATA_SIZE]) -> Self {
+    pub fn read(req_tag: ReqTag, lba: usize, read_buf: &'buffer mut [u8; DATA_SIZE]) -> Self {
         Self::Read {
             req_tag,
             lba,
@@ -92,7 +92,7 @@ impl<'a, ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usize>
         }
     }
 
-    pub fn write(req_tag: ReqTag, lba: usize, write_buf: &'a [u8; DATA_SIZE]) -> Self {
+    pub fn write(req_tag: ReqTag, lba: usize, write_buf: &'buffer [u8; DATA_SIZE]) -> Self {
         Self::Write {
             req_tag,
             lba,
