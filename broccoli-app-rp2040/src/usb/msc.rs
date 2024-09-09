@@ -675,7 +675,6 @@ impl<'driver, 'channel, 'buffer, D: Driver<'driver>> MscBulkHandler<'driver, 'ch
                                         // データを取り出して応答
                                         let read_data = &read10_buf[start_index..end_index];
                                         let Ok(write_resp) = write_ep.write(read_data).await else {
-                                            // TODO: Write EP Errorになる
                                             error!("Write EP Error (Read 10)");
                                             phase_error_tag = Some(cbw_packet.tag);
                                             latest_sense_data = Some(RequestSenseData::from(
