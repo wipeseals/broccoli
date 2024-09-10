@@ -19,7 +19,7 @@ use embassy_usb::{Builder, Config, Handler};
 use export::debug;
 use static_cell::StaticCell;
 
-use crate::ftl::request::{DataRequest, DataRequestError, DataResponse};
+use crate::ftl::request::{DataRequest, DataRequestError, DataRequestId, DataResponse};
 use crate::shared::constant::*;
 use crate::shared::datatype::{LedState, MscDataTransferTag};
 use crate::usb::msc::{BulkTransferRequest, MscBulkHandler, MscBulkHandlerConfig, MscCtrlHandler};
@@ -58,96 +58,61 @@ async fn data_request_task() {
         let request = CHANNEL_MSC_TO_DATA_REQUEST.receive().await;
         debug!("DataRequest: {:?}", request);
 
-        match request {
-            DataRequest::Setup { req_tag } => {
+        match request.req_id {
+            DataRequestId::Setup => {
                 // Setup
                 // RAM Diskでは何もしない
                 CHANNEL_MSC_RESPONSE_TO_BULK
-                    .send(DataResponse::Setup {
-                        req_tag,
-                        error: None,
-                    })
+                    .send(DataResponse::setup(request.req_tag))
                     .await
             }
-            DataRequest::Echo { req_tag } => {
+            DataRequestId::Echo => {
                 CHANNEL_MSC_RESPONSE_TO_BULK
-                    .send(DataResponse::Echo {
-                        req_tag,
-                        error: None,
-                    })
+                    .send(DataResponse::echo(request.req_tag))
                     .await
             }
-            DataRequest::Read {
-                req_tag,
-                lba,
-                read_buf,
-            } => {
-                let ram_offset_start = lba * USB_BLOCK_SIZE;
+            DataRequestId::Read => {
+                let mut resp = DataResponse::read(request.req_tag, [0; USB_BLOCK_SIZE]);
+
+                let ram_offset_start = request.lba * USB_BLOCK_SIZE;
                 let ram_offset_end = ram_offset_start + USB_BLOCK_SIZE;
 
                 if ram_offset_end > ram_disk.len() {
-                    crate::error!("Write out of range. lba: {}", lba);
-                    // 応答
-                    CHANNEL_MSC_RESPONSE_TO_BULK
-                        .send(DataResponse::Read {
-                            req_tag,
-                            read_buf,
-                            error: Some(DataRequestError::OutOfRange { lba }),
-                        })
-                        .await;
+                    crate::error!("Write out of range. lba: {}", request.lba);
+                    resp.error = Some(DataRequestError::OutOfRange { lba: request.lba });
                 } else {
                     // データをRAM Diskからコピー
-                    read_buf.copy_from_slice(&ram_disk[ram_offset_start..ram_offset_end]);
-                    // 応答
-                    CHANNEL_MSC_RESPONSE_TO_BULK
-                        .send(DataResponse::Read {
-                            req_tag,
-                            read_buf,
-                            error: None,
-                        })
-                        .await;
+                    resp.data
+                        .as_mut()
+                        .unwrap()
+                        .copy_from_slice(&ram_disk[ram_offset_start..ram_offset_end]);
                 }
+                // 応答
+                CHANNEL_MSC_RESPONSE_TO_BULK.send(resp).await;
             }
-            DataRequest::Write {
-                req_tag,
-                lba,
-                write_buf,
-            } => {
-                let ram_offset_start = lba * USB_BLOCK_SIZE;
+            DataRequestId::Write => {
+                let mut resp = DataResponse::write(request.req_tag);
+
+                let ram_offset_start = request.lba * USB_BLOCK_SIZE;
                 let ram_offset_end = ram_offset_start + USB_BLOCK_SIZE;
 
                 // 範囲外応答
                 if ram_offset_end > ram_disk.len() {
-                    crate::error!("Write out of range. lba: {}", lba);
-                    // 応答
-                    CHANNEL_MSC_RESPONSE_TO_BULK
-                        .send(DataResponse::Write {
-                            req_tag,
-                            write_buf,
-                            error: Some(DataRequestError::OutOfRange { lba }),
-                        })
-                        .await;
+                    crate::error!("Write out of range. lba: {}", request.lba);
+                    resp.error = Some(DataRequestError::OutOfRange { lba: request.lba })
                 } else {
                     // データをRAM Diskにコピーしてから応答
-                    ram_disk[ram_offset_start..ram_offset_end].copy_from_slice(write_buf);
-                    // 応答
-                    CHANNEL_MSC_RESPONSE_TO_BULK
-                        .send(DataResponse::Write {
-                            req_tag,
-                            write_buf,
-                            error: None,
-                        })
-                        .await;
+                    ram_disk[ram_offset_start..ram_offset_end]
+                        .copy_from_slice(request.data.unwrap().as_ref());
                 }
+                // 応答
+                CHANNEL_MSC_RESPONSE_TO_BULK.send(resp).await;
             }
-            DataRequest::Flush { req_tag } => {
+            DataRequestId::Flush => {
                 // Flush
                 // RAM Diskでは何もしない
                 CHANNEL_MSC_RESPONSE_TO_BULK
-                    .send(DataResponse::Flush {
-                        req_tag,
-                        error: None,
-                    })
+                    .send(DataResponse::flush(request.req_tag))
                     .await;
             }
         };

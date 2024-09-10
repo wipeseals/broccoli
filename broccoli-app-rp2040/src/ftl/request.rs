@@ -1,33 +1,68 @@
 /// Data Transfer Request ID
-#[derive(Eq, PartialEq, defmt::Format)]
-pub enum DataRequest<'buffer, ReqTag: Eq + PartialEq, const DATA_SIZE: usize> {
-    /// Setup Request
-    /// 初期化時に使用する。NAND IOやDMACなどの初期化を行う。これの応答まではUSB Endpointを有効にしない
-    Setup { req_tag: ReqTag },
-    /// Echo Request
-    /// 何もせずに応答する
-    Echo { req_tag: ReqTag },
-
-    /// Read Request
-    /// 指定されたLBAのデータを返す。1要求に対し1回の応答が返る
-    Read {
-        req_tag: ReqTag,
-        lba: usize,
-        read_buf: &'buffer mut [u8; DATA_SIZE],
-    },
-
-    /// Write Request
-    /// 指定されたLBAに指定されたBufferのデータを書き込む。1要求に対し1回の応答が返る
-    Write {
-        req_tag: ReqTag,
-        lba: usize,
-        write_buf: &'buffer [u8; DATA_SIZE],
-    },
-
-    /// Flush Request
-    /// Write Requestで要求された書き込みで、未完了のものがあれば完了させる
-    Flush { req_tag: ReqTag },
+#[derive(Clone, Copy, Eq, PartialEq, defmt::Format)]
+pub enum DataRequestId {
+    Setup,
+    Echo,
+    Read,
+    Write,
+    Flush,
 }
+
+/// Data Transfer Request
+#[derive(Eq, PartialEq, defmt::Format)]
+pub struct DataRequest<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> {
+    /// Request ID
+    pub req_id: DataRequestId,
+    /// Request Tag
+    pub req_tag: ReqTag,
+    /// Logical Block Address
+    pub lba: usize,
+    /// Data (for Write)
+    pub data: Option<[u8; DATA_SIZE]>,
+}
+
+impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataRequest<ReqTag, DATA_SIZE> {
+    /// Create a new DataRequest for Setup
+    pub fn setup(req_tag: ReqTag) -> Self {
+        Self {
+            req_id: DataRequestId::Setup,
+            req_tag,
+            lba: 0,
+            data: None,
+        }
+    }
+
+    /// Create a new DataRequest for Read
+    pub fn read(req_tag: ReqTag, lba: usize) -> Self {
+        Self {
+            req_id: DataRequestId::Read,
+            req_tag,
+            lba,
+            data: None,
+        }
+    }
+
+    /// Create a new DataRequest for Write
+    pub fn write(req_tag: ReqTag, lba: usize, data: [u8; DATA_SIZE]) -> Self {
+        Self {
+            req_id: DataRequestId::Write,
+            req_tag,
+            lba,
+            data: Some(data),
+        }
+    }
+
+    /// Create a new DataRequest for Flush
+    pub fn flush(req_tag: ReqTag) -> Self {
+        Self {
+            req_id: DataRequestId::Flush,
+            req_tag,
+            lba: 0,
+            data: None,
+        }
+    }
+}
+
 /// Internal Transfer Error Code
 #[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
 pub enum DataRequestError {
@@ -43,100 +78,66 @@ pub enum DataRequestError {
 }
 
 /// Internal Transfer Response
-#[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
-pub enum DataResponse<'buffer, ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usize> {
-    /// Setup Response
-    Setup {
-        req_tag: ReqTag,
-        error: Option<DataRequestError>,
-    },
-    /// Echo Response
-    Echo {
-        req_tag: ReqTag,
-        error: Option<DataRequestError>,
-    },
-
-    /// Read Response
-    Read {
-        req_tag: ReqTag,
-        error: Option<DataRequestError>,
-        read_buf: &'buffer [u8; DATA_SIZE],
-    },
-
-    /// Write Response
-    Write {
-        req_tag: ReqTag,
-        error: Option<DataRequestError>,
-        write_buf: &'buffer [u8; DATA_SIZE],
-    },
-
-    /// Flush Response
-    Flush {
-        req_tag: ReqTag,
-        error: Option<DataRequestError>,
-    },
+#[derive(Eq, PartialEq, defmt::Format)]
+pub struct DataResponse<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> {
+    /// Request ID
+    pub req_id: DataRequestId,
+    /// Request Tag
+    pub req_tag: ReqTag,
+    /// Error Code
+    pub error: Option<DataRequestError>,
+    /// Data (for Read)
+    pub data: Option<[u8; DATA_SIZE]>,
 }
 
-impl<'buffer, ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usize>
-    DataRequest<'buffer, ReqTag, DATA_SIZE>
-{
+impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataResponse<ReqTag, DATA_SIZE> {
+    /// Create a new DataResponse for Setup
+    pub fn setup(req_tag: ReqTag) -> Self {
+        Self {
+            req_id: DataRequestId::Setup,
+            req_tag,
+            error: None,
+            data: None,
+        }
+    }
+
+    /// Create a new DataResponse for Echo
     pub fn echo(req_tag: ReqTag) -> Self {
-        Self::Echo { req_tag }
-    }
-
-    pub fn read(req_tag: ReqTag, lba: usize, read_buf: &'buffer mut [u8; DATA_SIZE]) -> Self {
-        Self::Read {
+        Self {
+            req_id: DataRequestId::Echo,
             req_tag,
-            lba,
-            read_buf,
+            error: None,
+            data: None,
         }
     }
 
-    pub fn write(req_tag: ReqTag, lba: usize, write_buf: &'buffer [u8; DATA_SIZE]) -> Self {
-        Self::Write {
+    /// Create a new DataResponse for Read
+    pub fn read(req_tag: ReqTag, data: [u8; DATA_SIZE]) -> Self {
+        Self {
+            req_id: DataRequestId::Read,
             req_tag,
-            lba,
-            write_buf,
+            error: None,
+            data: Some(data),
         }
     }
 
+    /// Create a new DataResponse for Write
+    pub fn write(req_tag: ReqTag) -> Self {
+        Self {
+            req_id: DataRequestId::Write,
+            req_tag,
+            error: None,
+            data: None,
+        }
+    }
+
+    /// Create a new DataResponse for Flush
     pub fn flush(req_tag: ReqTag) -> Self {
-        Self::Flush { req_tag }
-    }
-}
-
-impl<'buffer, ReqTag: Copy + Clone + Eq + PartialEq, const DATA_SIZE: usize>
-    DataResponse<'buffer, ReqTag, DATA_SIZE>
-{
-    pub fn echo(req_tag: ReqTag, error: Option<DataRequestError>) -> Self {
-        Self::Echo { req_tag, error }
-    }
-
-    pub fn read(
-        req_tag: ReqTag,
-        error: Option<DataRequestError>,
-        read_buf: &'buffer [u8; DATA_SIZE],
-    ) -> Self {
-        Self::Read {
+        Self {
+            req_id: DataRequestId::Flush,
             req_tag,
-            error,
-            read_buf,
+            error: None,
+            data: None,
         }
-    }
-
-    pub fn write(
-        req_tag: ReqTag,
-        error: Option<DataRequestError>,
-        write_buf: &'buffer [u8; DATA_SIZE],
-    ) -> Self {
-        Self::Write {
-            req_tag,
-            error,
-            write_buf,
-        }
-    }
-
-    pub fn flush(req_tag: ReqTag, error: Option<DataRequestError>) -> Self {
-        Self::Flush { req_tag, error }
     }
 }

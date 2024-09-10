@@ -11,9 +11,9 @@ pub const CHANNEL_LEDCTRL_N: usize = 1;
 /// USB Control Transfer to Bulk Transfer channel size
 pub const CHANNEL_CTRL_TO_BULK_N: usize = 2;
 /// USB Bulk Transfer to Internal Request channel size
-pub const CHANNEL_BULK_TO_DATA_REQUEST_N: usize = 2;
+pub const CHANNEL_BULK_TO_DATA_REQUEST_N: usize = 4;
 /// USB Internal Request to Bulk Transfer channel size
-pub const CHANNEL_DATA_RESPONSE_TO_BULK_N: usize = 2;
+pub const CHANNEL_DATA_RESPONSE_TO_BULK_N: usize = 4;
 
 /// Buffer allocation fail retry duration in microseconds
 pub const BUFFER_ALLOCATION_FAIL_RETRY_DURATION_US: u64 = 100;

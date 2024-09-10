@@ -24,7 +24,7 @@ use embassy_usb::{Builder, Config, Handler};
 use export::debug;
 use static_cell::StaticCell;
 
-use crate::ftl::request::{DataRequest, DataResponse};
+use crate::ftl::request::{DataRequest, DataRequestId, DataResponse};
 use crate::shared::constant::*;
 use crate::shared::datatype::MscDataTransferTag;
 use crate::usb::scsi::*;
@@ -270,7 +270,7 @@ pub struct MscBulkHandlerConfig {
 
 /// USB Mass Storage Class Bulk Handler
 /// This handler is used to handle the bulk transfers for the Mass Storage Class.
-pub struct MscBulkHandler<'driver, 'channel, 'buffer, D: Driver<'driver>> {
+pub struct MscBulkHandler<'driver, 'channel, D: Driver<'driver>> {
     /// Bulk Transfer Request Receiver (for Mass Storage Reset)
     ctrl_to_bulk_request_receiver: DynamicReceiver<'channel, BulkTransferRequest>,
     /// Bulk Endpoint Out
@@ -282,11 +282,10 @@ pub struct MscBulkHandler<'driver, 'channel, 'buffer, D: Driver<'driver>> {
     config: MscBulkHandlerConfig,
 
     /// Request Read/Write to Flash Translation Layer
-    data_request_sender:
-        DynamicSender<'channel, DataRequest<'buffer, MscDataTransferTag, USB_BLOCK_SIZE>>,
+    data_request_sender: DynamicSender<'channel, DataRequest<MscDataTransferTag, USB_BLOCK_SIZE>>,
     /// Response Read/Write from Flash Translation Layer
     data_response_receiver:
-        DynamicReceiver<'channel, DataResponse<'buffer, MscDataTransferTag, USB_BLOCK_SIZE>>,
+        DynamicReceiver<'channel, DataResponse<MscDataTransferTag, USB_BLOCK_SIZE>>,
 }
 
 impl<'channel> Handler for MscCtrlHandler<'channel> {
@@ -339,11 +338,11 @@ impl<'channel> MscCtrlHandler<'channel> {
         }
     }
 
-    pub fn build<'a, 'driver, 'buffer, D: Driver<'driver>>(
+    pub fn build<'a, 'driver, D: Driver<'driver>>(
         &'channel mut self,
         builder: &mut Builder<'driver, D>,
         config: Config<'channel>,
-        bulk_handler: &'a mut MscBulkHandler<'driver, 'channel, 'buffer, D>,
+        bulk_handler: &'a mut MscBulkHandler<'driver, 'channel, D>,
     ) where
         'channel: 'driver,
     {
@@ -386,17 +385,17 @@ impl MscBulkHandlerConfig {
     }
 }
 
-impl<'driver, 'channel, 'buffer, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, 'buffer, D> {
+impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D> {
     pub fn new(
         config: MscBulkHandlerConfig,
         ctrl_to_bulk_request_receiver: DynamicReceiver<'channel, BulkTransferRequest>,
         data_request_sender: DynamicSender<
             'channel,
-            DataRequest<'buffer, MscDataTransferTag, USB_BLOCK_SIZE>,
+            DataRequest<MscDataTransferTag, USB_BLOCK_SIZE>,
         >,
         data_response_receiver: DynamicReceiver<
             'channel,
-            DataResponse<'buffer, MscDataTransferTag, USB_BLOCK_SIZE>,
+            DataResponse<MscDataTransferTag, USB_BLOCK_SIZE>,
         >,
     ) -> Self {
         Self {
@@ -630,41 +629,38 @@ impl<'driver, 'channel, 'buffer, D: Driver<'driver>> MscBulkHandler<'driver, 'ch
                         let lba = read10_data.lba as usize;
                         let transfer_length = read10_data.transfer_length as usize;
 
+                        // TODO: channelに秋がある場合transfer_length分のRequest投げるTaskと、Responseを受け取るTaskのjoinにする
                         for transfer_index in 0..transfer_length {
-                            let mut read10_buf = [0u8; USB_BLOCK_SIZE];
                             let req_tag = MscDataTransferTag::new(cbw_packet.tag, transfer_index);
-                            let data_request = DataRequest::read(req_tag, lba, &mut read10_buf);
+                            let req = DataRequest::read(req_tag, lba);
 
-                            debug!("Send DataRequest: {:#x}", data_request);
-                            self.data_request_sender.send(data_request).await;
+                            debug!("Send DataRequest: {:#x}", req);
+                            self.data_request_sender.send(req).await;
 
-                            let response = self.data_response_receiver.receive().await;
-                            debug!("Receive DataResponse: {:#x}", response);
+                            let resp = self.data_response_receiver.receive().await;
+                            debug!("Receive DataResponse: {:#x}", resp);
 
-                            match response {
+                            match resp.req_id {
                                 // Read Response
                                 // req_tag一致, transfer_count一致, error無しが正常ケース
-                                DataResponse::Read {
-                                    req_tag: resp_tag,
-                                    read_buf: read10_buf,
-                                    error,
-                                } => {
+                                DataRequestId::Read => {
                                     // Check if the response is valid
-                                    if (req_tag != resp_tag) {
-                                        error!("Invalid Response: {:#x}", response);
+                                    if (req_tag != resp.req_tag) {
+                                        error!("Invalid Response: {:#x}", resp);
                                         latest_sense_data = Some(RequestSenseData::from(
                                             SenseKey::HardwareError,
                                             AdditionalSenseCodeType::HardwareErrorEmbeddedSoftware,
                                         ));
                                     }
                                     // Check if there is an error
-                                    if let Some(error) = error {
-                                        error!("Invalid Response: {:#x}", response);
+                                    if let Some(error) = resp.error {
+                                        error!("Invalid Response: {:#x}", resp);
                                         latest_sense_data =
                                             Some(RequestSenseData::from_data_request_error(error));
                                     }
 
                                     // transfer read data
+                                    let read_data = resp.data.as_ref().unwrap();
                                     for packet_i in 0..USB_PACKET_COUNT_PER_LOGICAL_BLOCK {
                                         let start_index = (packet_i * USB_MAX_PACKET_SIZE) as usize;
                                         let end_index =
@@ -673,8 +669,9 @@ impl<'driver, 'channel, 'buffer, D: Driver<'driver>> MscBulkHandler<'driver, 'ch
                                         let end_index = end_index.min(USB_BLOCK_SIZE);
 
                                         // データを取り出して応答
-                                        let read_data = &read10_buf[start_index..end_index];
-                                        let Ok(write_resp) = write_ep.write(read_data).await else {
+                                        let packet_data = &read_data[start_index..end_index];
+                                        let Ok(write_resp) = write_ep.write(packet_data).await
+                                        else {
                                             error!("Write EP Error (Read 10)");
                                             phase_error_tag = Some(cbw_packet.tag);
                                             latest_sense_data = Some(RequestSenseData::from(
@@ -687,7 +684,7 @@ impl<'driver, 'channel, 'buffer, D: Driver<'driver>> MscBulkHandler<'driver, 'ch
                                 }
                                 // Read処理中にRead以外の応答が来た場合は実装不具合
                                 _ => {
-                                    crate::unreachable!("Invalid Response: {:#x}", response);
+                                    crate::unreachable!("Invalid Response: {:#x}", resp);
                                 }
                             }
                         }
