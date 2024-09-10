@@ -119,7 +119,6 @@ async fn data_request_task() {
                 // 範囲外応答
                 if ram_offset_end > ram_disk.len() {
                     crate::error!("Write out of range. lba: {}", lba);
-                    drop(write_buf);
                     // 応答
                     CHANNEL_MSC_RESPONSE_TO_BULK
                         .send(DataResponse::Write {
@@ -131,7 +130,6 @@ async fn data_request_task() {
                 } else {
                     // データをRAM Diskにコピーしてから応答
                     ram_disk[ram_offset_start..ram_offset_end].copy_from_slice(write_buf);
-                    drop(write_buf);
                     // 応答
                     CHANNEL_MSC_RESPONSE_TO_BULK
                         .send(DataResponse::Write {
