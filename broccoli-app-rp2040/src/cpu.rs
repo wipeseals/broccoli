@@ -1,2 +1,2 @@
-pub mod cpu1;
 pub mod cpu0;
+pub mod cpu1;
