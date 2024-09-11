@@ -17,8 +17,8 @@ pub struct DataRequest<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> {
     pub req_tag: ReqTag,
     /// Logical Block Address
     pub lba: usize,
-    /// Data (for Write)
-    pub data: Option<[u8; DATA_SIZE]>,
+    /// Data (for Write) Channelに使うためにはSized traitを満たす必要がありOption削除
+    pub data: [u8; DATA_SIZE],
 }
 
 impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataRequest<ReqTag, DATA_SIZE> {
@@ -28,7 +28,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataRequest<ReqTag, DATA_SI
             req_id: DataRequestId::Setup,
             req_tag,
             lba: 0,
-            data: None,
+            data: [0; DATA_SIZE],
         }
     }
 
@@ -38,7 +38,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataRequest<ReqTag, DATA_SI
             req_id: DataRequestId::Read,
             req_tag,
             lba,
-            data: None,
+            data: [0; DATA_SIZE],
         }
     }
 
@@ -48,7 +48,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataRequest<ReqTag, DATA_SI
             req_id: DataRequestId::Write,
             req_tag,
             lba,
-            data: Some(data),
+            data,
         }
     }
 
@@ -58,7 +58,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataRequest<ReqTag, DATA_SI
             req_id: DataRequestId::Flush,
             req_tag,
             lba: 0,
-            data: None,
+            data: [0; DATA_SIZE],
         }
     }
 }
@@ -86,8 +86,8 @@ pub struct DataResponse<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> {
     pub req_tag: ReqTag,
     /// Error Code
     pub error: Option<DataRequestError>,
-    /// Data (for Read)
-    pub data: Option<[u8; DATA_SIZE]>,
+    /// Data (for Read): Channelに使うためにはSized traitを満たす必要がありOption削除
+    pub data: [u8; DATA_SIZE],
 }
 
 impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataResponse<ReqTag, DATA_SIZE> {
@@ -97,7 +97,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataResponse<ReqTag, DATA_S
             req_id: DataRequestId::Setup,
             req_tag,
             error: None,
-            data: None,
+            data: [0; DATA_SIZE],
         }
     }
 
@@ -107,7 +107,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataResponse<ReqTag, DATA_S
             req_id: DataRequestId::Echo,
             req_tag,
             error: None,
-            data: None,
+            data: [0; DATA_SIZE],
         }
     }
 
@@ -117,7 +117,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataResponse<ReqTag, DATA_S
             req_id: DataRequestId::Read,
             req_tag,
             error: None,
-            data: Some(data),
+            data,
         }
     }
 
@@ -127,7 +127,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataResponse<ReqTag, DATA_S
             req_id: DataRequestId::Write,
             req_tag,
             error: None,
-            data: None,
+            data: [0; DATA_SIZE],
         }
     }
 
@@ -137,7 +137,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataResponse<ReqTag, DATA_S
             req_id: DataRequestId::Flush,
             req_tag,
             error: None,
-            data: None,
+            data: [0; DATA_SIZE],
         }
     }
 }

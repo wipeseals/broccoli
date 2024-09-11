@@ -409,12 +409,12 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
     }
 
     /// Handle response for simple command
-    async fn handle_response_single(
-        write_ep: &mut <D as Driver<'driver>>::EndpointIn,
+    async fn handle_response_single<'a>(
+        write_ep: &'a mut <D as Driver<'driver>>::EndpointIn,
         status: CommandBlockStatus,
-        write_data: Option<&[u8]>,
-        cbw_packet: &CommandBlockWrapperPacket,
-        csw_packet: &mut CommandStatusWrapperPacket,
+        write_data: Option<&'a [u8]>,
+        cbw_packet: &'a CommandBlockWrapperPacket,
+        csw_packet: &'a mut CommandStatusWrapperPacket,
     ) -> Result<(), EndpointError> {
         if let Some(data) = write_data {
             // transfer data
@@ -657,7 +657,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                             }
 
                             // transfer read data
-                            let read_data = resp.data.as_ref().unwrap();
+                            let read_data = resp.data.as_ref();
                             for packet_i in 0..USB_PACKET_COUNT_PER_LOGICAL_BLOCK {
                                 let start_index = (packet_i * USB_MAX_PACKET_SIZE);
                                 let end_index = ((packet_i + 1) * USB_MAX_PACKET_SIZE);
@@ -704,7 +704,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                         for transfer_index in 0..transfer_length {
                             // packet size分のデータを受け取る
                             let req_tag = MscDataTransferTag::new(cbw_packet.tag, transfer_index);
-                            let req = DataRequest::write(req_tag, lba, [0u8; USB_BLOCK_SIZE]);
+                            let mut req = DataRequest::write(req_tag, lba, [0u8; USB_BLOCK_SIZE]);
                             for packet_i in 0..USB_PACKET_COUNT_PER_LOGICAL_BLOCK {
                                 let start_index = (packet_i * USB_MAX_PACKET_SIZE);
                                 let end_index = ((packet_i + 1) * USB_MAX_PACKET_SIZE);
@@ -712,9 +712,8 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                                 let end_index = end_index.min(USB_BLOCK_SIZE);
 
                                 // データを受け取る
-                                let Ok(read_resp) = read_ep
-                                    .read(&mut req.data.unwrap()[start_index..end_index])
-                                    .await
+                                let Ok(read_resp) =
+                                    read_ep.read(&mut req.data[start_index..end_index]).await
                                 else {
                                     error!("Read EP Error (Write 10)");
                                     phase_error_tag = Some(cbw_packet.tag);

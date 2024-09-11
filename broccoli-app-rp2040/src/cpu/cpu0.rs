@@ -84,7 +84,6 @@ async fn data_request_task() {
                     // データをRAM Diskからコピー
                     resp.data
                         .as_mut()
-                        .unwrap()
                         .copy_from_slice(&ram_disk[ram_offset_start..ram_offset_end]);
                 }
                 // 応答
@@ -103,7 +102,7 @@ async fn data_request_task() {
                 } else {
                     // データをRAM Diskにコピーしてから応答
                     ram_disk[ram_offset_start..ram_offset_end]
-                        .copy_from_slice(request.data.unwrap().as_ref());
+                        .copy_from_slice(request.data.as_ref());
                 }
                 // 応答
                 CHANNEL_MSC_RESPONSE_TO_BULK.send(resp).await;
