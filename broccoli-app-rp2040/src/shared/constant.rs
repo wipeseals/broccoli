@@ -44,9 +44,9 @@ pub const USB_SERIAL_NUMBER: &str = "snbroccoli";
 /// USB device maximum power consumption in mA
 pub const USB_MAX_POWER: u16 = 100;
 /// USB device maximum packet size
-pub const USB_MAX_PACKET_SIZE: u8 = 64;
+pub const USB_MAX_PACKET_SIZE: usize = 64;
 /// USB device packet count per logical block (512byte / 64byte = 8)
-pub const USB_PACKET_COUNT_PER_LOGICAL_BLOCK: u8 = USB_BLOCK_SIZE as u8 / USB_MAX_PACKET_SIZE;
+pub const USB_PACKET_COUNT_PER_LOGICAL_BLOCK: usize = (USB_BLOCK_SIZE / USB_MAX_PACKET_SIZE);
 /// USB device vendor ID as a byte array
 pub const USB_VENDOR_ID: [u8; 8] = *b"broccoli";
 /// USB device product ID as a byte array

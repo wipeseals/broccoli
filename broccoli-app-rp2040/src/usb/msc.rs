@@ -634,58 +634,51 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                             let req_tag = MscDataTransferTag::new(cbw_packet.tag, transfer_index);
                             let req = DataRequest::read(req_tag, lba);
 
-                            debug!("Send DataRequest: {:#x}", req);
                             self.data_request_sender.send(req).await;
-
                             let resp = self.data_response_receiver.receive().await;
-                            debug!("Receive DataResponse: {:#x}", resp);
 
-                            match resp.req_id {
-                                // Read Response
-                                // req_tag一致, transfer_count一致, error無しが正常ケース
-                                DataRequestId::Read => {
-                                    // Check if the response is valid
-                                    if (req_tag != resp.req_tag) {
-                                        error!("Invalid Response: {:#x}", resp);
-                                        latest_sense_data = Some(RequestSenseData::from(
-                                            SenseKey::HardwareError,
-                                            AdditionalSenseCodeType::HardwareErrorEmbeddedSoftware,
-                                        ));
-                                    }
-                                    // Check if there is an error
-                                    if let Some(error) = resp.error {
-                                        error!("Invalid Response: {:#x}", resp);
-                                        latest_sense_data =
-                                            Some(RequestSenseData::from_data_request_error(error));
-                                    }
+                            // Read処理中にRead以外の応答が来た場合は実装不具合
+                            if resp.req_id != DataRequestId::Read {
+                                crate::unreachable!("Invalid Response: {:#x}", resp);
+                            }
+                            // Check if the response is valid
+                            if (req_tag != resp.req_tag) {
+                                error!("Invalid Response: {:#x}", resp);
+                                latest_sense_data = Some(RequestSenseData::from(
+                                    SenseKey::HardwareError,
+                                    AdditionalSenseCodeType::HardwareErrorEmbeddedSoftware,
+                                ));
+                            }
+                            // Check if there is an error
+                            if let Some(error) = resp.error {
+                                error!("Invalid Response: {:#x}", resp);
+                                latest_sense_data =
+                                    Some(RequestSenseData::from_data_request_error(error));
+                            }
 
-                                    // transfer read data
-                                    let read_data = resp.data.as_ref().unwrap();
-                                    for packet_i in 0..USB_PACKET_COUNT_PER_LOGICAL_BLOCK {
-                                        let start_index = (packet_i * USB_MAX_PACKET_SIZE) as usize;
-                                        let end_index =
-                                            ((packet_i + 1) * USB_MAX_PACKET_SIZE) as usize;
-                                        // 範囲がUSB_BLOCK_SIZEを超えないように修正
-                                        let end_index = end_index.min(USB_BLOCK_SIZE);
+                            // transfer read data
+                            let read_data = resp.data.as_ref().unwrap();
+                            for packet_i in 0..USB_PACKET_COUNT_PER_LOGICAL_BLOCK {
+                                let start_index = (packet_i * USB_MAX_PACKET_SIZE);
+                                let end_index = ((packet_i + 1) * USB_MAX_PACKET_SIZE);
+                                // 範囲がUSB_BLOCK_SIZEを超えないように修正
+                                let end_index = end_index.min(USB_BLOCK_SIZE);
 
-                                        // データを取り出して応答
-                                        let packet_data = &read_data[start_index..end_index];
-                                        let Ok(write_resp) = write_ep.write(packet_data).await
-                                        else {
-                                            error!("Write EP Error (Read 10)");
-                                            phase_error_tag = Some(cbw_packet.tag);
-                                            latest_sense_data = Some(RequestSenseData::from(
-                                            SenseKey::IllegalRequest,
-                                            AdditionalSenseCodeType::IllegalRequestInvalidCommand,
-                                        ));
-                                            break 'read_ep_loop;
-                                        };
-                                    }
-                                }
-                                // Read処理中にRead以外の応答が来た場合は実装不具合
-                                _ => {
-                                    crate::unreachable!("Invalid Response: {:#x}", resp);
-                                }
+                                // データを取り出して応答
+                                let packet_data = &read_data[start_index..end_index];
+                                debug!(
+                                    "Send Read Data (LBA: {:#x}, TransferIndex: {:#x}, PacketIndex: {:#x}): {:#x}",
+                                    lba, transfer_index, packet_i, packet_data
+                                );
+                                let Ok(write_resp) = write_ep.write(packet_data).await else {
+                                    error!("Write EP Error (Read 10)");
+                                    phase_error_tag = Some(cbw_packet.tag);
+                                    latest_sense_data = Some(RequestSenseData::from(
+                                        SenseKey::IllegalRequest,
+                                        AdditionalSenseCodeType::IllegalRequestInvalidCommand,
+                                    ));
+                                    break 'read_ep_loop;
+                                };
                             }
                         }
 
@@ -713,8 +706,8 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                             let req_tag = MscDataTransferTag::new(cbw_packet.tag, transfer_index);
                             let req = DataRequest::write(req_tag, lba, [0u8; USB_BLOCK_SIZE]);
                             for packet_i in 0..USB_PACKET_COUNT_PER_LOGICAL_BLOCK {
-                                let start_index = (packet_i * USB_MAX_PACKET_SIZE) as usize;
-                                let end_index = ((packet_i + 1) * USB_MAX_PACKET_SIZE) as usize;
+                                let start_index = (packet_i * USB_MAX_PACKET_SIZE);
+                                let end_index = ((packet_i + 1) * USB_MAX_PACKET_SIZE);
                                 // 範囲がUSB_BLOCK_SIZEを超えないように修正
                                 let end_index = end_index.min(USB_BLOCK_SIZE);
 
@@ -739,29 +732,24 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                             let resp = self.data_response_receiver.receive().await;
                             debug!("Receive DataResponse: {:#x}", resp);
 
-                            match resp.req_id {
-                                // Write Response
-                                // req_tag一致, transfer_count一致, error無しが正常ケース
-                                DataRequestId::Write => {
-                                    // Check if the response is valid
-                                    if (req_tag != resp.req_tag) {
-                                        error!("Invalid Response: {:#x}", resp);
-                                        latest_sense_data = Some(RequestSenseData::from(
-                                            SenseKey::HardwareError,
-                                            AdditionalSenseCodeType::HardwareErrorEmbeddedSoftware,
-                                        ));
-                                    }
-                                    // Check if there is an error
-                                    if let Some(error) = resp.error {
-                                        error!("Invalid Response: {:#x}", resp);
-                                        latest_sense_data =
-                                            Some(RequestSenseData::from_data_request_error(error));
-                                    }
-                                }
-                                // Write処理中にWrite以外の応答が来た場合は実装不具合
-                                _ => {
-                                    crate::unreachable!("Invalid Response: {:#x}", resp);
-                                }
+                            // Write処理中にWrite以外の応答が来た場合は実装不具合
+                            if resp.req_id != DataRequestId::Write {
+                                crate::unreachable!("Invalid Response: {:#x}", resp);
+                            }
+
+                            // Check if the response is valid
+                            if (req_tag != resp.req_tag) {
+                                error!("Invalid Response: {:#x}", resp);
+                                latest_sense_data = Some(RequestSenseData::from(
+                                    SenseKey::HardwareError,
+                                    AdditionalSenseCodeType::HardwareErrorEmbeddedSoftware,
+                                ));
+                            }
+                            // Check if there is an error
+                            if let Some(error) = resp.error {
+                                error!("Invalid Response: {:#x}", resp);
+                                latest_sense_data =
+                                    Some(RequestSenseData::from_data_request_error(error));
                             }
                         }
 

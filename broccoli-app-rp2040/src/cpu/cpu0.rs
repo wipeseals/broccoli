@@ -127,7 +127,7 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
     config.product = Some(USB_PRODUCT);
     config.serial_number = Some(USB_SERIAL_NUMBER);
     config.max_power = USB_MAX_POWER;
-    config.max_packet_size_0 = USB_MAX_PACKET_SIZE;
+    config.max_packet_size_0 = USB_MAX_PACKET_SIZE as u8;
 
     let mut config_descriptor = [0; 256];
     let mut bos_descriptor = [0; 256];
