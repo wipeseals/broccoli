@@ -701,6 +701,82 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                         debug!("Send CSW: {:#x}", csw_packet);
                         write_ep.write(&csw_data).await
                     }
+                    x if x == ScsiCommand::Write10 as u8 => {
+                        // Write 10 data. resp variable data
+                        let write10_data = Write10Command::from_data(scsi_commands);
+                        debug!("Write 10 Data: {:#x}", write10_data);
+                        let lba = write10_data.lba as usize;
+                        let transfer_length = write10_data.transfer_length as usize;
+
+                        for transfer_index in 0..transfer_length {
+                            // packet size分のデータを受け取る
+                            let req_tag = MscDataTransferTag::new(cbw_packet.tag, transfer_index);
+                            let req = DataRequest::write(req_tag, lba, [0u8; USB_BLOCK_SIZE]);
+                            for packet_i in 0..USB_PACKET_COUNT_PER_LOGICAL_BLOCK {
+                                let start_index = (packet_i * USB_MAX_PACKET_SIZE) as usize;
+                                let end_index = ((packet_i + 1) * USB_MAX_PACKET_SIZE) as usize;
+                                // 範囲がUSB_BLOCK_SIZEを超えないように修正
+                                let end_index = end_index.min(USB_BLOCK_SIZE);
+
+                                // データを受け取る
+                                let Ok(read_resp) = read_ep
+                                    .read(&mut req.data.unwrap()[start_index..end_index])
+                                    .await
+                                else {
+                                    error!("Read EP Error (Write 10)");
+                                    phase_error_tag = Some(cbw_packet.tag);
+                                    latest_sense_data = Some(RequestSenseData::from(
+                                        SenseKey::IllegalRequest,
+                                        AdditionalSenseCodeType::IllegalRequestInvalidCommand,
+                                    ));
+                                    break 'read_ep_loop;
+                                };
+                            }
+
+                            debug!("Send DataRequest: {:#x}", req);
+                            self.data_request_sender.send(req).await;
+
+                            let resp = self.data_response_receiver.receive().await;
+                            debug!("Receive DataResponse: {:#x}", resp);
+
+                            match resp.req_id {
+                                // Write Response
+                                // req_tag一致, transfer_count一致, error無しが正常ケース
+                                DataRequestId::Write => {
+                                    // Check if the response is valid
+                                    if (req_tag != resp.req_tag) {
+                                        error!("Invalid Response: {:#x}", resp);
+                                        latest_sense_data = Some(RequestSenseData::from(
+                                            SenseKey::HardwareError,
+                                            AdditionalSenseCodeType::HardwareErrorEmbeddedSoftware,
+                                        ));
+                                    }
+                                    // Check if there is an error
+                                    if let Some(error) = resp.error {
+                                        error!("Invalid Response: {:#x}", resp);
+                                        latest_sense_data =
+                                            Some(RequestSenseData::from_data_request_error(error));
+                                    }
+                                }
+                                // Write処理中にWrite以外の応答が来た場合は実装不具合
+                                _ => {
+                                    crate::unreachable!("Invalid Response: {:#x}", resp);
+                                }
+                            }
+                        }
+
+                        // CSW 応答
+                        csw_packet.status =
+                            CommandBlockStatus::from_bool(latest_sense_data.is_none());
+                        let transfer_bytes = transfer_length * self.config.block_size;
+                        if transfer_bytes < cbw_packet.data_transfer_length as usize {
+                            csw_packet.data_residue =
+                                (cbw_packet.data_transfer_length as usize - transfer_bytes) as u32;
+                        }
+                        let csw_data = csw_packet.to_data();
+                        debug!("Send CSW: {:#x}", csw_packet);
+                        write_ep.write(&csw_data).await
+                    }
                     _ => {
                         error!("Unsupported Command: {:#x}", scsi_command);
                         // save latest sense data

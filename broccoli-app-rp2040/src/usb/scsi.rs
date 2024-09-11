@@ -572,7 +572,7 @@ impl ModeSense6Data {
 /// SCSI Reade 10 command length
 pub const READ_10_DATA_SIZE: usize = 10;
 
-/// SCSI Mode Sense 10 command structure
+/// SCSI Read 10 command structure
 #[derive(Copy, Clone, PartialEq, Eq, defmt::Format)]
 pub struct Read10Command {
     /// byte0: Operation Code (0x28)
@@ -642,6 +642,62 @@ impl Read10Command {
             link: (data[9] & 0x40) != 0,
             flag: (data[9] & 0x20) != 0,
             vendor_specific: data[9] & 0x1f,
+        }
+    }
+}
+
+/// SCSI Write 10 command length
+pub const WRITE_10_DATA_SIZE: usize = 10;
+
+/// SCSI Write 10 command structure
+#[derive(Copy, Clone, PartialEq, Eq, defmt::Format)]
+pub struct Write10Command {
+    /// byte0: Operation Code (0x2A)
+    pub op_code: u8,
+    /// byte1: Write Protect
+    pub wrprotect: u8,
+    /// byte1: Disable Page Out
+    /// 0: Page Out is enabled, 1: Page Out is disabled (Data is not cached)
+    pub dpo: bool,
+    /// byte1: FUA (Force Unit Access)
+    /// 0: Normal, 1: FUA (Data is forced to be written to the medium)
+    pub fua: bool,
+    /// byte2-5: Logical Block Address
+    pub lba: u32,
+    /// byte6: Group Number
+    pub group_number: u8,
+    /// byte7-8: Transfer Length
+    pub transfer_length: u16,
+    /// byte9: control
+    /// 0: Normal, 1: Normal ACA (ACA is enabled)
+    pub control: u8,
+}
+
+impl Write10Command {
+    pub fn new(lba: u32, transfer_length: u16) -> Self {
+        Self {
+            op_code: 0x2A,
+            wrprotect: 0,
+            dpo: false,
+            fua: false,
+            lba,
+            group_number: 0,
+            transfer_length,
+            control: 0,
+        }
+    }
+
+    pub fn from_data(data: &[u8]) -> Self {
+        crate::assert!(data.len() >= WRITE_10_DATA_SIZE);
+        Self {
+            op_code: data[0],
+            wrprotect: (data[1] >> 5) & 0x7,
+            dpo: (data[1] & 0x10) != 0,
+            fua: (data[1] & 0x08) != 0,
+            lba: BigEndian::read_u32(&data[2..6]),
+            group_number: data[6] & 0x1f,
+            transfer_length: BigEndian::read_u16(&data[7..9]),
+            control: data[9],
         }
     }
 }
