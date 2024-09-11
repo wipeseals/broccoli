@@ -1,3 +1,5 @@
+use core::cmp::{Eq, PartialEq};
+
 /// USB MSC <--> Internal Request Data Transfer Channel
 #[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
 pub struct MscDataTransferTag {

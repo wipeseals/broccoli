@@ -1,3 +1,9 @@
+use core::cmp::{Eq, PartialEq};
+use core::option::{
+    Option,
+    Option::{None, Some},
+};
+
 /// Data Transfer Request ID
 #[derive(Clone, Copy, Eq, PartialEq, defmt::Format)]
 pub enum DataRequestId {

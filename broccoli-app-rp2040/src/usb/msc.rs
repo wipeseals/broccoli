@@ -1,6 +1,15 @@
 use core::borrow::{Borrow, BorrowMut};
 use core::f32::consts::E;
 use core::fmt::Error;
+use core::mem::drop;
+use core::option::{
+    Option,
+    Option::{None, Some},
+};
+use core::result::{
+    Result,
+    Result::{Err, Ok},
+};
 
 use byteorder::{ByteOrder, LittleEndian};
 use defmt::*;

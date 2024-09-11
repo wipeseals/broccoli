@@ -7,6 +7,9 @@ mod ftl;
 mod shared;
 mod usb;
 
+use core::default::Default;
+use core::marker::Sized;
+
 use cpu::{cpu0, cpu1};
 use defmt::*;
 use embassy_executor::{Executor, Spawner};
