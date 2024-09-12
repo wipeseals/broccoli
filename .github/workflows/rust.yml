@@ -24,7 +24,7 @@ jobs:
             skip_clippy: false
             skip_test: false
           - crate: broccoli-app-rp2040
-            skip_clippy: true
+            skip_clippy: false
             skip_test: true
     steps:
       - name: Checkout code
