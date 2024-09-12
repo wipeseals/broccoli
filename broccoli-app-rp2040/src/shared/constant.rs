@@ -1,7 +1,7 @@
 /// USB device number of blocks
 pub const DEBUG_ENABLE_RAM_DISK: bool = true;
 /// USB device number of blocks
-pub const DEBUG_RAM_DISK_NUM_BLOCKS: usize = 128;
+pub const DEBUG_RAM_DISK_NUM_BLOCKS: usize = 16;
 
 /// Core1 task stack size
 pub const CORE1_TASK_STACK_SIZE: usize = 4096;
