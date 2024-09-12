@@ -200,10 +200,10 @@ impl AdditionalSenseCodeType {
     }
 }
 
-/// SCSI Inquiry command structure
+/// SCSI Request Sense command structure
 pub const REQUEST_SENSE_DATA_SIZE: usize = 20;
 
-/// SCSI Inquiry data structure
+/// SCSI Request Sense data structure
 #[derive(Copy, Clone, PartialEq, Eq, defmt::Format)]
 pub struct RequestSenseData {
     /// 0: Valid, 1: Invalid.  set to 0
