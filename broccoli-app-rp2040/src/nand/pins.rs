@@ -152,7 +152,7 @@ impl NandIoPins<'_> {
         self.rbb.set_input_enable(true);
         self.rbb.set_output_disable(true);
 
-        trace!("Init All pins");
+        defmt::trace!("Init All pins");
     }
 
     /// Set PinDir
@@ -177,7 +177,7 @@ impl NandIoPins<'_> {
         self.io6.set_input_enable((data & 0x40) == 0);
         self.io7.set_input_enable((data & 0x80) == 0);
 
-        trace!("Set IO Pin Dir: 0x{:02X}", data);
+        defmt::trace!("Set IO Pin Dir: 0x{:02X}", data);
     }
 
     /// Set data
@@ -268,9 +268,9 @@ impl NandIoPins<'_> {
                 self.ceb0.set_state(bsp::hal::gpio::PinState::High).unwrap();
                 self.ceb1.set_state(bsp::hal::gpio::PinState::Low).unwrap();
             }
-            _ => core::unreachable!("Invalid CS index"),
+            _ => defmt::unreachable!("Invalid CS index"),
         }
-        trace!("Assert CS: 0x{:02X}", cs_index);
+        defmt::trace!("Assert CS: 0x{:02X}", cs_index);
     }
 
     /// deassert CS
@@ -278,7 +278,7 @@ impl NandIoPins<'_> {
         self.ceb0.set_state(bsp::hal::gpio::PinState::High).unwrap();
         self.ceb1.set_state(bsp::hal::gpio::PinState::High).unwrap();
 
-        trace!("Deassert CS");
+        defmt::trace!("Deassert CS");
     }
 
     /// Wait for busy
@@ -296,13 +296,13 @@ impl NandIoPins<'_> {
             count += 1;
             // timeout
             if count >= retry_count {
-                warn!("Wait for Busy: Timeout: {}", count);
+                defmt::warn!("Wait for Busy: Timeout: {}", count);
                 return Err(Error::Timeout);
             }
             delay_f();
             busy = self.rbb.is_low().unwrap();
         }
-        trace!("Wait for Busy: count: {}", count);
+        defmt::trace!("Wait for Busy: count: {}", count);
         Ok(())
     }
 
@@ -313,7 +313,7 @@ impl NandIoPins<'_> {
         self.wpb
             .set_state(bsp::hal::gpio::PinState::from(!enable))
             .unwrap();
-        trace!("Set Write Protect Enable: {}", enable);
+        defmt::trace!("Set Write Protect Enable: {}", enable);
     }
 
     /// Set Function Pins
@@ -344,7 +344,7 @@ impl NandIoPins<'_> {
             .set_state(bsp::hal::gpio::PinState::from(!read_enable))
             .unwrap();
 
-        trace!(
+        defmt::trace!(
             "Set Func Pins: CLE={}, ALE={}, /WE={}, /RE={}",
             command_latch,
             address_latch,
@@ -375,7 +375,7 @@ impl NandIoPins<'_> {
         self.set_func_pins(true, false, true, false);
         delay_f();
 
-        trace!("Command Input[{}]: 0x{:02X}", 0, command);
+        defmt::trace!("Command Input[{}]: 0x{:02X}", 0, command);
     }
 
     /// Address Input
@@ -396,7 +396,7 @@ impl NandIoPins<'_> {
             self.set_func_pins(false, true, true, false);
             delay_f();
 
-            trace!("Address Input[{}]: 0x{:02X}", index, *address);
+            defmt::trace!("Address Input[{}]: 0x{:02X}", index, *address);
         }
     }
 
@@ -419,7 +419,7 @@ impl NandIoPins<'_> {
             self.set_func_pins(false, false, true, false);
             delay_f();
 
-            trace!("Data Input[{}]: 0x{:02X}", index, *data);
+            defmt::trace!("Data Input[{}]: 0x{:02X}", index, *data);
         }
     }
 
@@ -453,7 +453,7 @@ impl NandIoPins<'_> {
             self.set_func_pins(false, false, false, false);
             delay_f();
 
-            trace!("Data Output[{}]: 0x{:02X}", index, *data);
+            defmt::trace!("Data Output[{}]: 0x{:02X}", index, *data);
         }
 
         // return read data

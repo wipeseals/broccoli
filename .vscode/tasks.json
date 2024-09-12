@@ -10,9 +10,13 @@
             "options": {
                 "cwd": "${workspaceFolder}/${input:crate}"
             },
-            "problemMatcher": [
-                "$rustc"
-            ]
+            "problemMatcher": {
+                "base": "$rustc",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}/${input:crate}"
+                ]
+            }
         },
         {
             "label": "build release",
@@ -21,9 +25,13 @@
             "options": {
                 "cwd": "${workspaceFolder}/${input:crate}"
             },
-            "problemMatcher": [
-                "$rustc"
-            ]
+            "problemMatcher": {
+                "base": "$rustc",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}/${input:crate}"
+                ]
+            }
         },
         {
             "label": "run debug",
@@ -32,9 +40,13 @@
             "options": {
                 "cwd": "${workspaceFolder}/${input:crate}"
             },
-            "problemMatcher": [
-                "$rustc"
-            ]
+            "problemMatcher": {
+                "base": "$rustc",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}/${input:crate}"
+                ]
+            }
         },
         {
             "label": "build debug",
@@ -43,9 +55,13 @@
             "options": {
                 "cwd": "${workspaceFolder}/${input:crate}"
             },
-            "problemMatcher": [
-                "$rustc"
-            ]
+            "problemMatcher": {
+                "base": "$rustc",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}/${input:crate}"
+                ]
+            }
         },
         {
             "label": "fmt",
@@ -54,9 +70,13 @@
             "options": {
                 "cwd": "${workspaceFolder}/${input:crate}"
             },
-            "problemMatcher": [
-                "$rustc"
-            ]
+            "problemMatcher": {
+                "base": "$rustc",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}/${input:crate}"
+                ]
+            }
         },
         {
             "label": "fmt fix",
@@ -65,9 +85,13 @@
             "options": {
                 "cwd": "${workspaceFolder}/${input:crate}"
             },
-            "problemMatcher": [
-                "$rustc"
-            ]
+            "problemMatcher": {
+                "base": "$rustc",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}/${input:crate}"
+                ]
+            }
         },
         {
             "label": "clippy",
@@ -76,9 +100,13 @@
             "options": {
                 "cwd": "${workspaceFolder}/${input:crate}"
             },
-            "problemMatcher": [
-                "$rustc"
-            ]
+            "problemMatcher": {
+                "base": "$rustc",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}/${input:crate}"
+                ]
+            }
         },
         {
             "label": "clippy fix",
@@ -87,9 +115,13 @@
             "options": {
                 "cwd": "${workspaceFolder}/${input:crate}"
             },
-            "problemMatcher": [
-                "$rustc"
-            ]
+            "problemMatcher": {
+                "base": "$rustc",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}/${input:crate}"
+                ]
+            }
         }
     ],
     "inputs": [

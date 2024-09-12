@@ -42,7 +42,7 @@ cortex-m-rt = "0.7.0"
 critical-section = "1.1"
 panic-probe = { version = "0.3", features = ["print-defmt"] }
 smart-leds = "0.3.0"
-heapless = "0.8"
+heapless = { version = "0.8", features = ["defmt-03"] }
 
 embedded-hal-1 = { package = "embedded-hal", version = "1.0" }
 embedded-hal-async = "1.0"
@@ -55,6 +55,7 @@ log = "0.4"
 pio-proc = "0.2"
 pio = "0.2.1"
 rand = { version = "0.8.5", default-features = false }
+once_cell = { version = "1.19.0", default-features = false, features = ["critical-section"] }
 
 [profile.release]
 debug = 2
