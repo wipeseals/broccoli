@@ -299,13 +299,13 @@ pub struct MscBulkHandler<'driver, 'channel, D: Driver<'driver>> {
 
 impl<'channel> Handler for MscCtrlHandler<'channel> {
     fn control_out<'a>(&'a mut self, req: Request, buf: &'a [u8]) -> Option<OutResponse> {
-        debug!("Got control_out, request={}, buf={:a}", req, buf);
+        defmt::trace!("Got control_out, request={}, buf={:a}", req, buf);
         None
     }
 
     /// Respond to DeviceToHost control messages, where the host requests some data from us.
     fn control_in<'a>(&'a mut self, req: Request, buf: &'a mut [u8]) -> Option<InResponse<'a>> {
-        debug!("Got control_in, request={}", req);
+        defmt::trace!("Got control_in, request={}", req);
 
         // requestType: Class/Interface, host->device
         // request: 0xff (Mass Storage Reset), 0xfe (Get Max LUN)
@@ -316,7 +316,7 @@ impl<'channel> Handler for MscCtrlHandler<'channel> {
         match req.request {
             x if x == ClassSpecificRequest::MassStorageReset as u8 => {
                 // Mass Storage Reset
-                debug!("Mass Storage Reset");
+                defmt::trace!("Mass Storage Reset");
                 match self
                     .bulk_request_sender
                     .try_send(BulkTransferRequest::Reset)
@@ -327,12 +327,12 @@ impl<'channel> Handler for MscCtrlHandler<'channel> {
             }
             x if x == ClassSpecificRequest::GetMaxLun as u8 && req.length == 1 => {
                 // Get Max LUN
-                debug!("Get Max LUN");
+                defmt::trace!("Get Max LUN");
                 buf[0] = 0; // Only one LUN supported
                 Some(InResponse::Accepted(&buf[..1]))
             }
             _ => {
-                warn!("Unsupported request: {}", req.request);
+                defmt::warn!("Unsupported request: {}", req.request);
                 Some(InResponse::Rejected)
             }
         }
@@ -439,7 +439,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
 
         // Status Transport
         let csw_data = csw_packet.to_data();
-        debug!("Send CSW: {:#x}", csw_packet);
+        defmt::trace!("Send CSW: {:#x}", csw_packet);
         write_ep.write(&csw_data).await?;
 
         Ok(())
@@ -454,7 +454,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
         'main_loop: loop {
             // EndPoint有効待ち
             read_ep.wait_enabled().await;
-            debug!("Connected");
+            defmt::trace!("Connected");
 
             // Request Sense CommandでError reportingが必要なので、前回の情報を保持しておく
             let mut latest_sense_data: Option<RequestSenseData> = None;
@@ -466,7 +466,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                 if (self.ctrl_to_bulk_request_receiver.try_receive()
                     == Ok(BulkTransferRequest::Reset))
                 {
-                    debug!("Mass Storage Reset");
+                    defmt::trace!("Mass Storage Reset");
                     phase_error_tag = None;
                     break 'read_ep_loop;
                 }
@@ -477,7 +477,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                 // Command Transport
                 let mut read_buf = [0u8; USB_BLOCK_SIZE]; // read buffer分確保
                 let Ok(read_cbw_size) = read_ep.read(&mut read_buf).await else {
-                    error!("Read EP Error (CBW)");
+                    defmt::error!("Read EP Error (CBW)");
                     phase_error_tag = None; // unknown tag
                     latest_sense_data = Some(RequestSenseData::from(
                         SenseKey::IllegalRequest,
@@ -486,7 +486,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                     break 'read_ep_loop;
                 };
                 let Some(cbw_packet) = CommandBlockWrapperPacket::from_data(&read_buf) else {
-                    error!("Invalid CBW: {:#x}", read_buf);
+                    defmt::error!("Invalid CBW: {:#x}", read_buf);
                     phase_error_tag = None; // unknown tag
                     latest_sense_data = Some(RequestSenseData::from(
                         SenseKey::IllegalRequest,
@@ -495,7 +495,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                     break 'read_ep_loop;
                 };
                 if !cbw_packet.is_valid_signature() {
-                    error!("Invalid CBW signature: {:#x}", cbw_packet);
+                    defmt::error!("Invalid CBW signature: {:#x}", cbw_packet);
                     phase_error_tag = None; // unknown tag
                     latest_sense_data = Some(RequestSenseData::from(
                         SenseKey::IllegalRequest,
@@ -504,7 +504,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                     break 'read_ep_loop;
                 };
                 if cbw_packet.command_length == 0 {
-                    error!("Invalid CBW command length: {:#x}", cbw_packet);
+                    defmt::error!("Invalid CBW command length: {:#x}", cbw_packet);
                     phase_error_tag = None; // unknown tag
                     latest_sense_data = Some(RequestSenseData::from(
                         SenseKey::IllegalRequest,
@@ -525,7 +525,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                 // コマンドごとに処理
                 let send_resp_status: Result<(), EndpointError> = match scsi_command {
                     x if x == ScsiCommand::TestUnitReady as u8 => {
-                        debug!("Test Unit Ready");
+                        defmt::trace!("Test Unit Ready");
                         // カードの抜き差しなどはないので問題無しで応答
                         Self::handle_response_single(
                             write_ep,
@@ -537,7 +537,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                         .await
                     }
                     x if x == ScsiCommand::Inquiry as u8 => {
-                        debug!("Inquiry");
+                        defmt::trace!("Inquiry");
                         // Inquiry data. resp fixed data
                         let inquiry_data = InquiryCommandData::new(
                             self.config.vendor_id,
@@ -557,7 +557,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                         .await
                     }
                     x if x == ScsiCommand::ReadFormatCapacities as u8 => {
-                        debug!("Read Format Capacities");
+                        defmt::trace!("Read Format Capacities");
                         // Read Format Capacities data. resp fixed data
                         let read_format_capacities_data = ReadFormatCapacitiesData::new(
                             self.config.num_blocks as u32,
@@ -576,7 +576,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                         .await
                     }
                     x if x == ScsiCommand::ReadCapacity as u8 => {
-                        debug!("Read Capacity");
+                        defmt::trace!("Read Capacity");
                         // Read Capacity data. resp fixed data
                         let read_capacity_data = ReadCapacityData::new(
                             self.config.num_blocks as u32,
@@ -595,7 +595,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                         .await
                     }
                     x if x == ScsiCommand::ModeSense6 as u8 => {
-                        debug!("Mode Sense 6");
+                        defmt::trace!("Mode Sense 6");
                         // Mode Sense 6 data. resp fixed data
                         let mode_sense_data = ModeSense6Data::new();
 
@@ -618,7 +618,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                                 AdditionalSenseCodeType::NoAdditionalSenseInformation,
                             ));
                         }
-                        debug!("Request Sense Data: {:#x}", latest_sense_data.unwrap());
+                        defmt::trace!("Request Sense Data: {:#x}", latest_sense_data.unwrap());
 
                         let mut write_data = [0u8; REQUEST_SENSE_DATA_SIZE];
                         latest_sense_data.unwrap().prepare_to_buf(&mut write_data);
@@ -634,13 +634,14 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                     x if x == ScsiCommand::Read10 as u8 => {
                         // Read 10 data. resp variable data
                         let read10_data = Read10Command::from_data(scsi_commands);
-                        debug!("Read 10 Data: {:#x}", read10_data);
+                        defmt::trace!("Read 10 Data: {:#x}", read10_data);
                         let lba = read10_data.lba as usize;
                         let transfer_length = read10_data.transfer_length as usize;
 
                         // TODO: channelに秋がある場合transfer_length分のRequest投げるTaskと、Responseを受け取るTaskのjoinにする
                         for transfer_index in 0..transfer_length {
-                            let req_tag = MscDataTransferTag::new(cbw_packet.tag, transfer_index);
+                            let req_tag =
+                                MscDataTransferTag::new(cbw_packet.tag, transfer_index as u32);
                             let req = DataRequest::read(req_tag, lba);
 
                             self.data_request_sender.send(req).await;
@@ -648,11 +649,11 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
 
                             // Read処理中にRead以外の応答が来た場合は実装不具合
                             if resp.req_id != DataRequestId::Read {
-                                crate::unreachable!("Invalid Response: {:#x}", resp);
+                                defmt::unreachable!("Invalid Response: {:#x}", resp);
                             }
                             // Check if the response is valid
                             if (req_tag != resp.req_tag) {
-                                error!("Invalid Response: {:#x}", resp);
+                                defmt::error!("Invalid Response: {:#x}", resp);
                                 latest_sense_data = Some(RequestSenseData::from(
                                     SenseKey::HardwareError,
                                     AdditionalSenseCodeType::HardwareErrorEmbeddedSoftware,
@@ -660,7 +661,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                             }
                             // Check if there is an error
                             if let Some(error) = resp.error {
-                                error!("Invalid Response: {:#x}", resp);
+                                defmt::error!("Invalid Response: {:#x}", resp);
                                 latest_sense_data =
                                     Some(RequestSenseData::from_data_request_error(error));
                             }
@@ -675,12 +676,12 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
 
                                 // データを取り出して応答
                                 let packet_data = &read_data[start_index..end_index];
-                                debug!(
+                                defmt::trace!(
                                     "Send Read Data (LBA: {:#x}, TransferIndex: {:#x}, PacketIndex: {:#x}): {:#x}",
                                     lba, transfer_index, packet_i, packet_data
                                 );
                                 let Ok(write_resp) = write_ep.write(packet_data).await else {
-                                    error!("Write EP Error (Read 10)");
+                                    defmt::error!("Write EP Error (Read 10)");
                                     phase_error_tag = Some(cbw_packet.tag);
                                     latest_sense_data = Some(RequestSenseData::from(
                                         SenseKey::IllegalRequest,
@@ -700,19 +701,20 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                                 (cbw_packet.data_transfer_length as usize - transfer_bytes) as u32;
                         }
                         let csw_data = csw_packet.to_data();
-                        debug!("Send CSW: {:#x}", csw_packet);
+                        defmt::trace!("Send CSW: {:#x}", csw_packet);
                         write_ep.write(&csw_data).await
                     }
                     x if x == ScsiCommand::Write10 as u8 => {
                         // Write 10 data. resp variable data
                         let write10_data = Write10Command::from_data(scsi_commands);
-                        debug!("Write 10 Data: {:#x}", write10_data);
+                        defmt::trace!("Write 10 Data: {:#x}", write10_data);
                         let lba = write10_data.lba as usize;
                         let transfer_length = write10_data.transfer_length as usize;
 
                         for transfer_index in 0..transfer_length {
                             // packet size分のデータを受け取る
-                            let req_tag = MscDataTransferTag::new(cbw_packet.tag, transfer_index);
+                            let req_tag =
+                                MscDataTransferTag::new(cbw_packet.tag, transfer_index as u32);
                             let mut req = DataRequest::write(req_tag, lba, [0u8; USB_BLOCK_SIZE]);
                             for packet_i in 0..USB_PACKET_COUNT_PER_LOGICAL_BLOCK {
                                 let start_index = (packet_i * USB_MAX_PACKET_SIZE);
@@ -724,7 +726,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                                 let Ok(read_resp) =
                                     read_ep.read(&mut req.data[start_index..end_index]).await
                                 else {
-                                    error!("Read EP Error (Write 10)");
+                                    defmt::error!("Read EP Error (Write 10)");
                                     phase_error_tag = Some(cbw_packet.tag);
                                     latest_sense_data = Some(RequestSenseData::from(
                                         SenseKey::IllegalRequest,
@@ -734,20 +736,20 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                                 };
                             }
 
-                            debug!("Send DataRequest: {:#x}", req);
+                            defmt::trace!("Send DataRequest: {:#x}", req);
                             self.data_request_sender.send(req).await;
 
                             let resp = self.data_response_receiver.receive().await;
-                            debug!("Receive DataResponse: {:#x}", resp);
+                            defmt::trace!("Receive DataResponse: {:#x}", resp);
 
                             // Write処理中にWrite以外の応答が来た場合は実装不具合
                             if resp.req_id != DataRequestId::Write {
-                                crate::unreachable!("Invalid Response: {:#x}", resp);
+                                defmt::unreachable!("Invalid Response: {:#x}", resp);
                             }
 
                             // Check if the response is valid
                             if (req_tag != resp.req_tag) {
-                                error!("Invalid Response: {:#x}", resp);
+                                defmt::error!("Invalid Response: {:#x}", resp);
                                 latest_sense_data = Some(RequestSenseData::from(
                                     SenseKey::HardwareError,
                                     AdditionalSenseCodeType::HardwareErrorEmbeddedSoftware,
@@ -755,7 +757,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                             }
                             // Check if there is an error
                             if let Some(error) = resp.error {
-                                error!("Invalid Response: {:#x}", resp);
+                                defmt::error!("Invalid Response: {:#x}", resp);
                                 latest_sense_data =
                                     Some(RequestSenseData::from_data_request_error(error));
                             }
@@ -770,11 +772,10 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                                 (cbw_packet.data_transfer_length as usize - transfer_bytes) as u32;
                         }
                         let csw_data = csw_packet.to_data();
-                        debug!("Send CSW: {:#x}", csw_packet);
                         write_ep.write(&csw_data).await
                     }
                     _ => {
-                        error!("Unsupported Command: {:#x}", scsi_command);
+                        defmt::error!("Unsupported Command: {:#x}", scsi_command);
                         // save latest sense data
                         latest_sense_data = Some(RequestSenseData::from(
                             SenseKey::IllegalRequest,
@@ -794,7 +795,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
 
                 // Phase Error時の対応
                 if let Err(e) = send_resp_status {
-                    error!("Send Response Error: {:?}", e);
+                    defmt::error!("Send Response Error: {:?}", e);
                     // Phase Error時の対応用にtagを保持
                     phase_error_tag = Some(cbw_packet.tag);
                     break 'read_ep_loop;
@@ -803,7 +804,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
 
             // CSW で Phase Error を返す
             if let Some(tag) = phase_error_tag {
-                error!("Phase Error Tag: {:#x}", tag);
+                defmt::error!("Phase Error Tag: {:#x}", tag);
                 let mut csw_packet = CommandStatusWrapperPacket::new();
                 csw_packet.tag = tag;
                 csw_packet.data_residue = 0;
@@ -812,7 +813,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                 // 失敗してもハンドリング無理
                 write_ep.write(&csw_data).await;
             }
-            debug!("Disconnected");
+            defmt::trace!("Disconnected");
         }
     }
 }

@@ -7,11 +7,11 @@ use core::option::{
 /// Data Transfer Request ID
 #[derive(Clone, Copy, Eq, PartialEq, defmt::Format)]
 pub enum DataRequestId {
-    Setup,
-    Echo,
-    Read,
-    Write,
-    Flush,
+    Setup = 0,
+    Echo = 1,
+    Read = 2,
+    Write = 3,
+    Flush = 4,
 }
 
 /// Data Transfer Request
@@ -84,7 +84,7 @@ pub enum DataRequestError {
 }
 
 /// Internal Transfer Response
-#[derive(Eq, PartialEq, defmt::Format)]
+#[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
 pub struct DataResponse<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> {
     /// Request ID
     pub req_id: DataRequestId,

@@ -69,7 +69,7 @@ impl StatusOutput {
         match chip_num {
             0 => (*self & StatusOutput::CHIP_STATUS0_FAIL).is_empty(),
             1 => (*self & StatusOutput::CHIP_STATUS1_FAIL).is_empty(),
-            _ => core::unreachable!("Invalid chip number"),
+            _ => core::defmt::unreachable!("Invalid chip number"),
         }
     }
 

@@ -35,7 +35,7 @@ static EXECUTOR1: StaticCell<Executor> = StaticCell::new();
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
-    info!("broccoli - Toy USB Mass Storage Device");
+    defmt::info!("broccoli - Toy USB Mass Storage Device");
 
     let p = embassy_rp::init(Default::default());
     let led = Output::new(p.PIN_25, Level::High);

@@ -193,7 +193,7 @@ impl AdditionalSenseCodeType {
             },
 
             _ => {
-                crate::unreachable!();
+                defmt::unreachable!();
                 AdditionalSenseCode { asc: 0, ascq: 0 }
             }
         }

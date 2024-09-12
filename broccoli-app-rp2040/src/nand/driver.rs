@@ -7,7 +7,9 @@ use defmt::{trace, warn};
 
 use broccoli_core::{
     nand::address::Address,
-    nand::driver::{CommandId, Driver, Error, StatusOutput, ID_READ_CMD_BYTES, ID_READ_EXPECT_DATA},
+    nand::driver::{
+        CommandId, Driver, Error, StatusOutput, ID_READ_CMD_BYTES, ID_READ_EXPECT_DATA,
+    },
 };
 
 use crate::nand::pins::NandIoPins;
@@ -48,12 +50,12 @@ impl Driver for Rp2040FwDriver<'_> {
     /// Initialize all pins
     fn init_pins<'a>(&'a mut self) {
         self.nandio_pins.init_all_pin();
-        trace!("Initialize all pins")
+        defmt::trace!("Initialize all pins")
     }
 
     fn set_write_protect<'a>(&'a mut self, enable: bool) {
         self.nandio_pins.set_write_protect_enable(enable);
-        trace!("Set Write Protect: enable={}", enable);
+        defmt::trace!("Set Write Protect: enable={}", enable);
     }
 
     /// Reset NAND IC
@@ -64,7 +66,7 @@ impl Driver for Rp2040FwDriver<'_> {
         });
         self.nandio_pins.deassert_cs();
         self.delay.delay_us(DELAY_US_FOR_RESET);
-        trace!("Reset: cs={}", cs_index);
+        defmt::trace!("Reset: cs={}", cs_index);
     }
 
     /// Read NAND IC ID
@@ -83,7 +85,7 @@ impl Driver for Rp2040FwDriver<'_> {
             });
         self.nandio_pins.deassert_cs();
 
-        trace!(
+        defmt::trace!(
             "ID Read: [{:02x}, {:02x}, {:02x}, {:02x}, {:02x}]",
             id_read_results[0],
             id_read_results[1],
@@ -108,7 +110,7 @@ impl Driver for Rp2040FwDriver<'_> {
         });
         self.nandio_pins.deassert_cs();
 
-        trace!("Status Read: cs={}, status={:02x}", cs_index, status[0]);
+        defmt::trace!("Status Read: cs={}, status={:02x}", cs_index, status[0]);
         StatusOutput::from_bits_truncate(status[0])
     }
 
@@ -144,11 +146,11 @@ impl Driver for Rp2040FwDriver<'_> {
                 });
                 self.nandio_pins.deassert_cs();
 
-                trace!("Read OK: cs={} address={:08x}", cs_index, address.raw());
+                defmt::trace!("Read OK: cs={} address={:08x}", cs_index, address.raw());
                 Ok(())
             }
             Err(_) => {
-                warn!(
+                defmt::warn!(
                     "Read Timeout: cs={} address={:08x}",
                     cs_index,
                     address.raw()
@@ -176,7 +178,11 @@ impl Driver for Rp2040FwDriver<'_> {
         async move { self.read_data(cs_index, address, read_data_ref, read_bytes) }
     }
 
-    fn erase_block<'a>(&'a mut self, cs_index: usize, address: Address) -> Result<StatusOutput, Error> {
+    fn erase_block<'a>(
+        &'a mut self,
+        cs_index: usize,
+        address: Address,
+    ) -> Result<StatusOutput, Error> {
         self.nandio_pins.assert_cs(cs_index);
         self.nandio_pins
             .input_command(CommandId::AutoBlockEraseFirst as u8, || {
@@ -205,7 +211,7 @@ impl Driver for Rp2040FwDriver<'_> {
                     self.delay.delay_us(DELAY_US_FOR_COMMAND_LATCH)
                 });
                 self.nandio_pins.deassert_cs();
-                trace!(
+                defmt::trace!(
                     "Erase: cs={} address={:08x} status={}",
                     cs_index,
                     address,
@@ -216,7 +222,7 @@ impl Driver for Rp2040FwDriver<'_> {
             }
             Err(_) => {
                 self.nandio_pins.deassert_cs();
-                warn!(
+                defmt::warn!(
                     "Erase Timeout: cs={} address={:08x}",
                     cs_index,
                     address.raw()
@@ -265,7 +271,7 @@ impl Driver for Rp2040FwDriver<'_> {
                     self.delay.delay_us(DELAY_US_FOR_COMMAND_LATCH)
                 });
                 self.nandio_pins.deassert_cs();
-                trace!(
+                defmt::trace!(
                     "Program: cs={} address={:08x} status={}",
                     cs_index,
                     address,
@@ -276,7 +282,7 @@ impl Driver for Rp2040FwDriver<'_> {
             }
             Err(_) => {
                 self.nandio_pins.deassert_cs();
-                warn!(
+                defmt::warn!(
                     "Program Timeout: cs={} address={:08x}",
                     cs_index,
                     address.raw()
@@ -299,10 +305,13 @@ impl Driver for Rp2040FwDriver<'_> {
     }
 
     async fn set_write_protect_async<'a>(&'a mut self, enable: bool) -> () {
-        async move { self.set_write_protect(enable); }.await
+        async move {
+            self.set_write_protect(enable);
+        }
+        .await
     }
 
-    async fn erase_block_async<'a> (
+    async fn erase_block_async<'a>(
         &'a mut self,
         cs_index: usize,
         address: Address,

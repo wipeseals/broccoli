@@ -6,11 +6,11 @@ pub struct MscDataTransferTag {
     /// CBW dCBWTag
     cbw_tag: u32,
     /// sequence number
-    seq_num: usize,
+    seq_num: u32,
 }
 
 impl MscDataTransferTag {
-    pub fn new(cbw_tag: u32, seq_num: usize) -> Self {
+    pub fn new(cbw_tag: u32, seq_num: u32) -> Self {
         Self { cbw_tag, seq_num }
     }
 }

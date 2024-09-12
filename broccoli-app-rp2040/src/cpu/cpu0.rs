@@ -52,11 +52,11 @@ async fn data_request_task() {
     //       とりあえず、RAM Diskパターンのみ実装するが、Executor二登録する関数単位で分けるといいかもしれない
     // RAM Disk Buffer for Debug
     let mut ram_disk = [0; USB_TOTAL_SIZE];
-    debug!("RAM Disk Size: {}", ram_disk.len());
+    defmt::trace!("RAM Disk Size: {}", ram_disk.len());
 
     loop {
         let request = CHANNEL_MSC_TO_DATA_REQUEST.receive().await;
-        debug!("DataRequest: {:?}", request);
+        defmt::trace!("DataRequest: {:?}", request);
 
         match request.req_id {
             DataRequestId::Setup => {
@@ -78,7 +78,7 @@ async fn data_request_task() {
                 let ram_offset_end = ram_offset_start + USB_BLOCK_SIZE;
 
                 if ram_offset_end > ram_disk.len() {
-                    crate::error!("Write out of range. lba: {}", request.lba);
+                    defmt::error!("Write out of range. lba: {}", request.lba);
                     resp.error = Some(DataRequestError::OutOfRange { lba: request.lba });
                 } else {
                     // データをRAM Diskからコピー
@@ -97,7 +97,7 @@ async fn data_request_task() {
 
                 // 範囲外応答
                 if ram_offset_end > ram_disk.len() {
-                    crate::error!("Write out of range. lba: {}", request.lba);
+                    defmt::error!("Write out of range. lba: {}", request.lba);
                     resp.error = Some(DataRequestError::OutOfRange { lba: request.lba })
                 } else {
                     // データをRAM Diskにコピーしてから応答
