@@ -774,6 +774,18 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                         let csw_data = csw_packet.to_data();
                         write_ep.write(&csw_data).await
                     }
+                    x if x == ScsiCommand::PreventAllowMediumRemoval as u8 => {
+                        defmt::trace!("Prevent/Allow Medium Removal");
+                        // カードの抜き差しを許可する
+                        Self::handle_response_single(
+                            write_ep,
+                            CommandBlockStatus::CommandPassed,
+                            None,
+                            &cbw_packet,
+                            &mut csw_packet,
+                        )
+                        .await
+                    }
                     _ => {
                         defmt::error!("Unsupported Command: {:#x}", scsi_command);
                         // save latest sense data
