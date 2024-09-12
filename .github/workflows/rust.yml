@@ -24,7 +24,7 @@ jobs:
             skip_clippy: false
             skip_test: false
           - crate: broccoli-app-rp2040
-            skip_clippy: false
+            skip_clippy: true # TODO: Actionsでのみエラーが発生している。 cannot find function `__faultmask_r` in module `crate::asm::inline`
             skip_test: true
     steps:
       - name: Checkout code
