@@ -51,7 +51,9 @@ async fn data_request_task() {
     // TODO: RAM Diskパターンは実装丸ごとわけないと分岐多くてやりづらいかもしれない
     //       とりあえず、RAM Diskパターンのみ実装するが、Executor二登録する関数単位で分けるといいかもしれない
     // RAM Disk Buffer for Debug
-    let mut ram_disk = [0; USB_TOTAL_SIZE];
+
+    let mut ram_disk = [0u8; USB_TOTAL_SIZE];
+
     defmt::trace!("RAM Disk Size: {}", ram_disk.len());
 
     loop {
