@@ -579,7 +579,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                         defmt::trace!("Read Capacity");
                         // Read Capacity data. resp fixed data
                         let read_capacity_data = ReadCapacityData::new(
-                            self.config.num_blocks as u32,
+                            (self.config.num_blocks - 1) as u32,
                             self.config.block_size as u32,
                         );
 
