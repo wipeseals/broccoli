@@ -579,7 +579,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                         defmt::trace!("Read Capacity");
                         // Read Capacity data. resp fixed data
                         let read_capacity_data = ReadCapacityData::new(
-                            self.config.num_blocks as u32,
+                            (self.config.num_blocks - 1) as u32,
                             self.config.block_size as u32,
                         );
 
@@ -635,11 +635,11 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                         // Read 10 data. resp variable data
                         let read10_data = Read10Command::from_data(scsi_commands);
                         defmt::trace!("Read 10 Data: {:#x}", read10_data);
-                        let lba = read10_data.lba as usize;
                         let transfer_length = read10_data.transfer_length as usize;
 
                         // TODO: channelに秋がある場合transfer_length分のRequest投げるTaskと、Responseを受け取るTaskのjoinにする
                         for transfer_index in 0..transfer_length {
+                            let lba = read10_data.lba as usize + transfer_index;
                             let req_tag =
                                 MscDataTransferTag::new(cbw_packet.tag, transfer_index as u32);
                             let req = DataRequest::read(req_tag, lba);
@@ -708,10 +708,10 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                         // Write 10 data. resp variable data
                         let write10_data = Write10Command::from_data(scsi_commands);
                         defmt::trace!("Write 10 Data: {:#x}", write10_data);
-                        let lba = write10_data.lba as usize;
                         let transfer_length = write10_data.transfer_length as usize;
 
                         for transfer_index in 0..transfer_length {
+                            let lba = write10_data.lba as usize + transfer_index;
                             // packet size分のデータを受け取る
                             let req_tag =
                                 MscDataTransferTag::new(cbw_packet.tag, transfer_index as u32);
@@ -773,6 +773,18 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                         }
                         let csw_data = csw_packet.to_data();
                         write_ep.write(&csw_data).await
+                    }
+                    x if x == ScsiCommand::PreventAllowMediumRemoval as u8 => {
+                        defmt::trace!("Prevent/Allow Medium Removal");
+                        // カードの抜き差しを許可する
+                        Self::handle_response_single(
+                            write_ep,
+                            CommandBlockStatus::CommandPassed,
+                            None,
+                            &cbw_packet,
+                            &mut csw_packet,
+                        )
+                        .await
                     }
                     _ => {
                         defmt::error!("Unsupported Command: {:#x}", scsi_command);

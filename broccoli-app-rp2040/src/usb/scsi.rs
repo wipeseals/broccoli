@@ -200,10 +200,10 @@ impl AdditionalSenseCodeType {
     }
 }
 
-/// SCSI Inquiry command structure
+/// SCSI Request Sense command structure
 pub const REQUEST_SENSE_DATA_SIZE: usize = 20;
 
-/// SCSI Inquiry data structure
+/// SCSI Request Sense data structure
 #[derive(Copy, Clone, PartialEq, Eq, defmt::Format)]
 pub struct RequestSenseData {
     /// 0: Valid, 1: Invalid.  set to 0
@@ -698,6 +698,39 @@ impl Write10Command {
             group_number: data[6] & 0x1f,
             transfer_length: BigEndian::read_u16(&data[7..9]),
             control: data[9],
+        }
+    }
+}
+
+/// Prevent/Allow Medium Removal command length
+pub const PREVENT_ALLOW_MEDIUM_REMOVAL_DATA_SIZE: usize = 6;
+
+/// Prevent/Allow Medium Removal command structure
+#[derive(Copy, Clone, PartialEq, Eq, defmt::Format)]
+pub struct PreventAllowMediumRemovalCommand {
+    /// byte0: Operation Code (0x1E)
+    pub op_code: u8,
+    /// byte4: Prevent (1=Lock, 0=Unlock)
+    pub prevent: bool,
+    /// byte5: Control
+    pub control: u8,
+}
+
+impl PreventAllowMediumRemovalCommand {
+    pub fn new(prevent: bool) -> Self {
+        Self {
+            op_code: 0x1E,
+            prevent,
+            control: 0,
+        }
+    }
+
+    pub fn from_data(data: &[u8]) -> Self {
+        crate::assert!(data.len() >= PREVENT_ALLOW_MEDIUM_REMOVAL_DATA_SIZE);
+        Self {
+            op_code: data[0],
+            prevent: data[4] != 0,
+            control: data[5],
         }
     }
 }
