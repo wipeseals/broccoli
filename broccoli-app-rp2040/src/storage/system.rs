@@ -1,6 +1,6 @@
 use embassy_sync::channel::{DynamicReceiver, DynamicSender};
 
-use super::protocol::{DataRequest, DataRequestId, DataResponse};
+use super::protocol::{StorageMsgId, StorageRequest, StorageResponse};
 
 /// Flash Storage Controller for FTL
 pub struct StorageSystem<
@@ -16,9 +16,9 @@ pub struct StorageSystem<
     /// Write Buffer (NAND_PAGE_SIZE * WRITE_BUFFER_N)
     write_buffer: [[u8; NAND_PAGE_SIZE]; WRITE_BUFFER_N],
     /// Request Channel Receiver
-    req_receiver: DynamicReceiver<'ch, DataRequest<ReqTag, LOGICAL_BLOCK_SIZE>>,
+    req_receiver: DynamicReceiver<'ch, StorageRequest<ReqTag, LOGICAL_BLOCK_SIZE>>,
     /// Response Channel Sender
-    resp_sender: DynamicSender<'ch, DataResponse<ReqTag, LOGICAL_BLOCK_SIZE>>,
+    resp_sender: DynamicSender<'ch, StorageResponse<ReqTag, LOGICAL_BLOCK_SIZE>>,
 }
 
 impl<
@@ -33,8 +33,8 @@ impl<
 {
     /// Create a new DataBuffer
     pub fn new(
-        req_receiver: DynamicReceiver<'ch, DataRequest<ReqTag, LOGICAL_BLOCK_SIZE>>,
-        resp_sender: DynamicSender<'ch, DataResponse<ReqTag, LOGICAL_BLOCK_SIZE>>,
+        req_receiver: DynamicReceiver<'ch, StorageRequest<ReqTag, LOGICAL_BLOCK_SIZE>>,
+        resp_sender: DynamicSender<'ch, StorageResponse<ReqTag, LOGICAL_BLOCK_SIZE>>,
     ) -> Self {
         Self {
             read_buffer: [[0; NAND_PAGE_SIZE]; READ_BUFFER_N],
@@ -68,36 +68,36 @@ impl<
     pub async fn run(&mut self) -> ! {
         loop {
             let request = self.req_receiver.receive().await;
-            match request.req_id {
-                DataRequestId::Setup => {
+            match request.message_id {
+                StorageMsgId::Setup => {
                     // TODO: NAND IOの初期化処理
-                    let response = DataResponse::report_setup_success(
+                    let response = StorageResponse::report_setup_success(
                         request.req_tag,
                         ((1024 - 100) * 64 * 2048 / LOGICAL_BLOCK_SIZE), // TODO: 仮の値. NANDの容量とブロックサイズ、管理データ向けに割り当てた容量から計算する
                     );
                     self.resp_sender.send(response).await;
                 }
-                DataRequestId::Echo => {
+                StorageMsgId::Echo => {
                     // Echoは何もしない
-                    let response = DataResponse::echo(request.req_tag);
+                    let response = StorageResponse::echo(request.req_tag);
                     self.resp_sender.send(response).await;
                 }
-                DataRequestId::Read => {
+                StorageMsgId::Read => {
                     // Read
                     // TODO: NANDからデータを読み出す処理
-                    let response = DataResponse::read(request.req_tag, [0; LOGICAL_BLOCK_SIZE]);
+                    let response = StorageResponse::read(request.req_tag, [0; LOGICAL_BLOCK_SIZE]);
                     self.resp_sender.send(response).await;
                 }
-                DataRequestId::Write => {
+                StorageMsgId::Write => {
                     // Write
                     // TODO: NANDにデータを書き込む処理
-                    let response = DataResponse::write(request.req_tag);
+                    let response = StorageResponse::write(request.req_tag);
                     self.resp_sender.send(response).await;
                 }
-                DataRequestId::Flush => {
+                StorageMsgId::Flush => {
                     // Flush
                     // TODO: WriteBufferの内容をNANDに書き込む処理
-                    let response = DataResponse::flush(request.req_tag);
+                    let response = StorageResponse::flush(request.req_tag);
                     self.resp_sender.send(response).await;
                 }
             }

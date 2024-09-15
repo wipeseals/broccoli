@@ -2,7 +2,7 @@ use embassy_sync::channel::{DynamicReceiver, DynamicSender, Receiver};
 
 use crate::{shared::constant::LOGICAL_BLOCK_SIZE, storage::protocol::DataRequestError};
 
-use super::protocol::{DataRequest, DataRequestId, DataResponse};
+use crate::storage::protocol::{StorageMsgId, StorageRequest, StorageResponse};
 
 /// RAM Disk for FTL
 pub struct RamDiskSystem<
@@ -14,9 +14,9 @@ pub struct RamDiskSystem<
     /// Storage on RAM
     data: [u8; TOTAL_DATA_SIZE],
     /// Request Channel Receiver
-    req_receiver: DynamicReceiver<'ch, DataRequest<ReqTag, LOGICAL_BLOCK_SIZE>>,
+    req_receiver: DynamicReceiver<'ch, StorageRequest<ReqTag, LOGICAL_BLOCK_SIZE>>,
     /// Response Channel Sender
-    resp_sender: DynamicSender<'ch, DataResponse<ReqTag, LOGICAL_BLOCK_SIZE>>,
+    resp_sender: DynamicSender<'ch, StorageResponse<ReqTag, LOGICAL_BLOCK_SIZE>>,
 }
 
 impl<
@@ -28,8 +28,8 @@ impl<
 {
     /// Create a new RamDisk
     pub fn new(
-        req_receiver: DynamicReceiver<'ch, DataRequest<ReqTag, LOGICAL_BLOCK_SIZE>>,
-        resp_sender: DynamicSender<'ch, DataResponse<ReqTag, LOGICAL_BLOCK_SIZE>>,
+        req_receiver: DynamicReceiver<'ch, StorageRequest<ReqTag, LOGICAL_BLOCK_SIZE>>,
+        resp_sender: DynamicSender<'ch, StorageResponse<ReqTag, LOGICAL_BLOCK_SIZE>>,
     ) -> Self {
         Self {
             data: [0; TOTAL_DATA_SIZE],
@@ -52,22 +52,22 @@ impl<
     pub async fn run(&mut self) -> ! {
         loop {
             let request = self.req_receiver.receive().await;
-            match request.req_id {
-                DataRequestId::Setup => {
+            match request.message_id {
+                StorageMsgId::Setup => {
                     // Setupは何もしない
-                    let response = DataResponse::report_setup_success(
+                    let response = StorageResponse::report_setup_success(
                         request.req_tag,
                         TOTAL_DATA_SIZE / LOGICAL_BLOCK_SIZE,
                     );
                     self.resp_sender.send(response).await;
                 }
-                DataRequestId::Echo => {
+                StorageMsgId::Echo => {
                     // Echoは何もしない
-                    let response = DataResponse::echo(request.req_tag);
+                    let response = StorageResponse::echo(request.req_tag);
                     self.resp_sender.send(response).await;
                 }
-                DataRequestId::Read => {
-                    let mut resp = DataResponse::read(request.req_tag, [0; LOGICAL_BLOCK_SIZE]);
+                StorageMsgId::Read => {
+                    let mut resp = StorageResponse::read(request.req_tag, [0; LOGICAL_BLOCK_SIZE]);
 
                     let ram_offset_start = request.lba * LOGICAL_BLOCK_SIZE;
                     let ram_offset_end = ram_offset_start + LOGICAL_BLOCK_SIZE;
@@ -83,8 +83,8 @@ impl<
                     // 応答
                     self.resp_sender.send(resp).await;
                 }
-                DataRequestId::Write => {
-                    let mut resp = DataResponse::write(request.req_tag);
+                StorageMsgId::Write => {
+                    let mut resp = StorageResponse::write(request.req_tag);
 
                     let ram_offset_start = request.lba * LOGICAL_BLOCK_SIZE;
                     let ram_offset_end = ram_offset_start + LOGICAL_BLOCK_SIZE;
@@ -100,9 +100,9 @@ impl<
                     // 応答
                     self.resp_sender.send(resp).await;
                 }
-                DataRequestId::Flush => {
+                StorageMsgId::Flush => {
                     // Flushは何もしない
-                    let response = DataResponse::flush(request.req_tag);
+                    let response = StorageResponse::flush(request.req_tag);
                     self.resp_sender.send(response).await;
                 }
             }

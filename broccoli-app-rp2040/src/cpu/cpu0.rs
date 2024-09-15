@@ -22,8 +22,8 @@ use static_cell::StaticCell;
 
 use crate::shared::constant::*;
 use crate::shared::datatype::{LedState, MscDataTransferTag};
-use crate::storage::protocol::{DataRequest, DataRequestError, DataRequestId, DataResponse};
-use crate::storage::ramdisk::RamDiskSystem;
+use crate::storage::misc::ramdisk::RamDiskSystem;
+use crate::storage::protocol::{DataRequestError, StorageMsgId, StorageRequest, StorageResponse};
 use crate::usb::msc::{BulkTransferRequest, MscBulkHandler, MscBulkHandlerConfig, MscCtrlHandler};
 
 // Control Transfer -> Bulk Transfer Channel
@@ -36,22 +36,22 @@ static CHANNEL_CTRL_TO_BULK: Channel<
 /// Bulk Transfer -> Internal Request Channel
 static CHANNEL_MSC_TO_DATA_REQUEST: Channel<
     CriticalSectionRawMutex,
-    DataRequest<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>,
+    StorageRequest<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>,
     CHANNEL_BULK_TO_DATA_REQUEST_N,
 > = Channel::new();
 
 /// Internal Request -> Bulk Transfer Channel
 static CHANNEL_MSC_RESPONSE_TO_BULK: Channel<
     CriticalSectionRawMutex,
-    DataResponse<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>,
+    StorageResponse<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>,
     CHANNEL_DATA_RESPONSE_TO_BULK_N,
 > = Channel::new();
 
 /// Set FAT12 Data to RAM Disk
 /// refs. https://github.com/hathach/tinyusb/blob/master/examples/device/cdc_msc/src/msc_disk.c#L52
 #[rustfmt::skip]
-fn set_fat12_data<'a>(
-    ramdisk: &'a mut RamDiskSystem<
+fn set_fat12_data(
+    ramdisk: &mut RamDiskSystem<
         MscDataTransferTag,
         USB_MSC_LOGICAL_BLOCK_SIZE,
         USB_MSC_TOTAL_CAPACITY_BYTES,

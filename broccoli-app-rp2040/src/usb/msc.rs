@@ -35,7 +35,7 @@ use static_cell::StaticCell;
 
 use crate::shared::constant::*;
 use crate::shared::datatype::MscDataTransferTag;
-use crate::storage::protocol::{DataRequest, DataRequestId, DataResponse};
+use crate::storage::protocol::{StorageMsgId, StorageRequest, StorageResponse};
 use crate::usb::scsi::*;
 
 // interfaceClass: 0x08 (Mass Storage)
@@ -292,10 +292,10 @@ pub struct MscBulkHandler<'driver, 'ch, D: Driver<'driver>> {
 
     /// Request Read/Write to Flash Translation Layer
     data_request_sender:
-        DynamicSender<'ch, DataRequest<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>>,
+        DynamicSender<'ch, StorageRequest<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>>,
     /// Response Read/Write from Flash Translation Layer
     data_response_receiver:
-        DynamicReceiver<'ch, DataResponse<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>>,
+        DynamicReceiver<'ch, StorageResponse<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>>,
 }
 
 impl<'ch> Handler for MscCtrlHandler<'ch> {
@@ -401,11 +401,11 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
         ctrl_to_bulk_request_receiver: DynamicReceiver<'ch, BulkTransferRequest>,
         data_request_sender: DynamicSender<
             'ch,
-            DataRequest<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>,
+            StorageRequest<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>,
         >,
         data_response_receiver: DynamicReceiver<
             'ch,
-            DataResponse<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>,
+            StorageResponse<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>,
         >,
     ) -> Self {
         Self {
@@ -643,13 +643,13 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
                             let lba = read10_data.lba as usize + transfer_index;
                             let req_tag =
                                 MscDataTransferTag::new(cbw_packet.tag, transfer_index as u32);
-                            let req = DataRequest::read(req_tag, lba);
+                            let req = StorageRequest::read(req_tag, lba);
 
                             self.data_request_sender.send(req).await;
                             let resp = self.data_response_receiver.receive().await;
 
                             // Read処理中にRead以外の応答が来た場合は実装不具合
-                            if resp.req_id != DataRequestId::Read {
+                            if resp.message_id != StorageMsgId::Read {
                                 defmt::unreachable!("Invalid Response: {:#x}", resp);
                             }
                             // Check if the response is valid
@@ -716,8 +716,11 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
                             // packet size分のデータを受け取る
                             let req_tag =
                                 MscDataTransferTag::new(cbw_packet.tag, transfer_index as u32);
-                            let mut req =
-                                DataRequest::write(req_tag, lba, [0u8; USB_MSC_LOGICAL_BLOCK_SIZE]);
+                            let mut req = StorageRequest::write(
+                                req_tag,
+                                lba,
+                                [0u8; USB_MSC_LOGICAL_BLOCK_SIZE],
+                            );
                             for packet_i in 0..USB_PACKET_COUNT_PER_LOGICAL_BLOCK {
                                 let start_index = (packet_i * USB_MAX_PACKET_SIZE);
                                 let end_index = ((packet_i + 1) * USB_MAX_PACKET_SIZE);
@@ -745,7 +748,7 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
                             defmt::trace!("Receive DataResponse: {:#x}", resp);
 
                             // Write処理中にWrite以外の応答が来た場合は実装不具合
-                            if resp.req_id != DataRequestId::Write {
+                            if resp.message_id != StorageMsgId::Write {
                                 defmt::unreachable!("Invalid Response: {:#x}", resp);
                             }
 
