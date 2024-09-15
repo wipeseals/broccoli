@@ -154,8 +154,8 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
             CHANNEL_MSC_TO_DATA_REQUEST.dyn_receiver(),
             CHANNEL_MSC_RESPONSE_TO_BULK.dyn_sender(),
         );
-        let ramdisk_fut = ramdisk.run();
         set_fat12_data(&mut ramdisk);
+        let ramdisk_fut = ramdisk.run();
         join(join(usb_fut, bulk_fut), ramdisk_fut).await;
     } else {
         // TODO: RAM Disk以外のデバイスを実装
