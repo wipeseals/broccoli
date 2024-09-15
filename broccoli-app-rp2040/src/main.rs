@@ -4,7 +4,7 @@
 #![cfg_attr(not(test), no_main)]
 
 mod cpu;
-mod ftl;
+mod storage;
 mod shared;
 mod usb;
 

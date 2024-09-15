@@ -33,9 +33,9 @@ use embassy_usb::{Builder, Config, Handler};
 use export::debug;
 use static_cell::StaticCell;
 
-use crate::ftl::request::{DataRequest, DataRequestId, DataResponse};
 use crate::shared::constant::*;
 use crate::shared::datatype::MscDataTransferTag;
+use crate::storage::protocol::{DataRequest, DataRequestId, DataResponse};
 use crate::usb::scsi::*;
 
 // interfaceClass: 0x08 (Mass Storage)

@@ -1,6 +1,6 @@
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 
-use crate::ftl::request::DataRequestError;
+use crate::storage::protocol::DataRequestError;
 
 /// SCSI command codes
 #[repr(u8)]
@@ -312,6 +312,9 @@ impl RequestSenseData {
                 SenseKey::IllegalRequest,
                 AdditionalSenseCodeType::HardwareErrorEmbeddedSoftware,
             ),
+            _ => {
+                crate::unreachable!("DataRequestError: {:?}", data_request_error);
+            }
         }
     }
 

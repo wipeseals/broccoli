@@ -75,6 +75,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataRequest<ReqTag, DATA_SI
 #[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
 pub enum DataRequestError {
     NoError,
+    ReportSetupSuccess { num_blocks: usize },
     General,
     BufferAllocationFail,
     NandError,
@@ -105,6 +106,16 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataResponse<ReqTag, DATA_S
             req_id: DataRequestId::Setup,
             req_tag,
             error: None,
+            data: [0; DATA_SIZE],
+        }
+    }
+
+    /// Create a new DataResponse for Setup Success
+    pub fn report_setup_success(req_tag: ReqTag, num_blocks: usize) -> Self {
+        Self {
+            req_id: DataRequestId::Setup,
+            req_tag,
+            error: Some(DataRequestError::ReportSetupSuccess { num_blocks }),
             data: [0; DATA_SIZE],
         }
     }

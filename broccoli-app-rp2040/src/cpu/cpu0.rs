@@ -20,10 +20,10 @@ use embassy_usb::{Builder, Config, Handler};
 use export::debug;
 use static_cell::StaticCell;
 
-use crate::ftl::ramdisk::RamDisk;
-use crate::ftl::request::{DataRequest, DataRequestError, DataRequestId, DataResponse};
 use crate::shared::constant::*;
 use crate::shared::datatype::{LedState, MscDataTransferTag};
+use crate::storage::protocol::{DataRequest, DataRequestError, DataRequestId, DataResponse};
+use crate::storage::ramdisk::RamDiskSystem;
 use crate::usb::msc::{BulkTransferRequest, MscBulkHandler, MscBulkHandlerConfig, MscCtrlHandler};
 
 // Control Transfer -> Bulk Transfer Channel
@@ -51,7 +51,7 @@ static CHANNEL_MSC_RESPONSE_TO_BULK: Channel<
 /// refs. https://github.com/hathach/tinyusb/blob/master/examples/device/cdc_msc/src/msc_disk.c#L52
 #[rustfmt::skip]
 fn set_fat12_data<'a>(
-    ramdisk: &'a mut RamDisk<
+    ramdisk: &'a mut RamDiskSystem<
         MscDataTransferTag,
         USB_MSC_LOGICAL_BLOCK_SIZE,
         USB_MSC_TOTAL_CAPACITY_BYTES,
@@ -146,11 +146,11 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
 
     // Run ramdisk for debug
     if DEBUG_ENABLE_RAM_DISK {
-        let mut ramdisk: RamDisk<
+        let mut ramdisk: RamDiskSystem<
             MscDataTransferTag,
             USB_MSC_LOGICAL_BLOCK_SIZE,
             USB_MSC_TOTAL_CAPACITY_BYTES,
-        > = RamDisk::new(
+        > = RamDiskSystem::new(
             CHANNEL_MSC_TO_DATA_REQUEST.dyn_receiver(),
             CHANNEL_MSC_RESPONSE_TO_BULK.dyn_sender(),
         );
