@@ -261,11 +261,11 @@ pub enum BulkTransferRequest {
 /// USB Mass Storage Class Control Handler
 /// This handler is used to handle the control requests for the Mass Storage Class.
 /// It supports the Mass Storage Reset and Get Max LUN requests.
-pub struct MscCtrlHandler<'channel> {
+pub struct MscCtrlHandler<'ch> {
     /// Interface Number
     if_num: InterfaceNumber,
     /// Bulk Transfer Request Sender (for Mass Storage Reset)
-    bulk_request_sender: DynamicSender<'channel, BulkTransferRequest>,
+    bulk_request_sender: DynamicSender<'ch, BulkTransferRequest>,
 }
 
 /// USB Mass Storage Class Bulk Handler Configuration
@@ -279,9 +279,9 @@ pub struct MscBulkHandlerConfig {
 
 /// USB Mass Storage Class Bulk Handler
 /// This handler is used to handle the bulk transfers for the Mass Storage Class.
-pub struct MscBulkHandler<'driver, 'channel, D: Driver<'driver>> {
+pub struct MscBulkHandler<'driver, 'ch, D: Driver<'driver>> {
     /// Bulk Transfer Request Receiver (for Mass Storage Reset)
-    ctrl_to_bulk_request_receiver: DynamicReceiver<'channel, BulkTransferRequest>,
+    ctrl_to_bulk_request_receiver: DynamicReceiver<'ch, BulkTransferRequest>,
     /// Bulk Endpoint Out
     read_ep: Option<<D as Driver<'driver>>::EndpointOut>,
     /// Bulk Endpoint In
@@ -291,13 +291,14 @@ pub struct MscBulkHandler<'driver, 'channel, D: Driver<'driver>> {
     config: MscBulkHandlerConfig,
 
     /// Request Read/Write to Flash Translation Layer
-    data_request_sender: DynamicSender<'channel, DataRequest<MscDataTransferTag, USB_BLOCK_SIZE>>,
+    data_request_sender:
+        DynamicSender<'ch, DataRequest<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>>,
     /// Response Read/Write from Flash Translation Layer
     data_response_receiver:
-        DynamicReceiver<'channel, DataResponse<MscDataTransferTag, USB_BLOCK_SIZE>>,
+        DynamicReceiver<'ch, DataResponse<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>>,
 }
 
-impl<'channel> Handler for MscCtrlHandler<'channel> {
+impl<'ch> Handler for MscCtrlHandler<'ch> {
     fn control_out<'a>(&'a mut self, req: Request, buf: &'a [u8]) -> Option<OutResponse> {
         defmt::trace!("Got control_out, request={}, buf={:a}", req, buf);
         None
@@ -339,8 +340,8 @@ impl<'channel> Handler for MscCtrlHandler<'channel> {
     }
 }
 
-impl<'channel> MscCtrlHandler<'channel> {
-    pub fn new(bulk_request_sender: DynamicSender<'channel, BulkTransferRequest>) -> Self {
+impl<'ch> MscCtrlHandler<'ch> {
+    pub fn new(bulk_request_sender: DynamicSender<'ch, BulkTransferRequest>) -> Self {
         Self {
             if_num: InterfaceNumber(0),
             bulk_request_sender,
@@ -348,12 +349,12 @@ impl<'channel> MscCtrlHandler<'channel> {
     }
 
     pub fn build<'a, 'driver, D: Driver<'driver>>(
-        &'channel mut self,
+        &'ch mut self,
         builder: &mut Builder<'driver, D>,
-        config: Config<'channel>,
-        bulk_handler: &'a mut MscBulkHandler<'driver, 'channel, D>,
+        config: Config<'ch>,
+        bulk_handler: &'a mut MscBulkHandler<'driver, 'ch, D>,
     ) where
-        'channel: 'driver,
+        'ch: 'driver,
     {
         // Bulk Only Transport for Mass Storage
         let mut function = builder.function(
@@ -394,17 +395,17 @@ impl MscBulkHandlerConfig {
     }
 }
 
-impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D> {
+impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
     pub fn new(
         config: MscBulkHandlerConfig,
-        ctrl_to_bulk_request_receiver: DynamicReceiver<'channel, BulkTransferRequest>,
+        ctrl_to_bulk_request_receiver: DynamicReceiver<'ch, BulkTransferRequest>,
         data_request_sender: DynamicSender<
-            'channel,
-            DataRequest<MscDataTransferTag, USB_BLOCK_SIZE>,
+            'ch,
+            DataRequest<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>,
         >,
         data_response_receiver: DynamicReceiver<
-            'channel,
-            DataResponse<MscDataTransferTag, USB_BLOCK_SIZE>,
+            'ch,
+            DataResponse<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>,
         >,
     ) -> Self {
         Self {
@@ -475,7 +476,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                 latest_sense_data = None;
 
                 // Command Transport
-                let mut read_buf = [0u8; USB_BLOCK_SIZE]; // read buffer分確保
+                let mut read_buf = [0u8; USB_MSC_LOGICAL_BLOCK_SIZE]; // read buffer分確保
                 let Ok(read_cbw_size) = read_ep.read(&mut read_buf).await else {
                     defmt::error!("Read EP Error (CBW)");
                     phase_error_tag = None; // unknown tag
@@ -672,7 +673,7 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                                 let start_index = (packet_i * USB_MAX_PACKET_SIZE);
                                 let end_index = ((packet_i + 1) * USB_MAX_PACKET_SIZE);
                                 // 範囲がUSB_BLOCK_SIZEを超えないように修正
-                                let end_index = end_index.min(USB_BLOCK_SIZE);
+                                let end_index = end_index.min(USB_MSC_LOGICAL_BLOCK_SIZE);
 
                                 // データを取り出して応答
                                 let packet_data = &read_data[start_index..end_index];
@@ -715,12 +716,13 @@ impl<'driver, 'channel, D: Driver<'driver>> MscBulkHandler<'driver, 'channel, D>
                             // packet size分のデータを受け取る
                             let req_tag =
                                 MscDataTransferTag::new(cbw_packet.tag, transfer_index as u32);
-                            let mut req = DataRequest::write(req_tag, lba, [0u8; USB_BLOCK_SIZE]);
+                            let mut req =
+                                DataRequest::write(req_tag, lba, [0u8; USB_MSC_LOGICAL_BLOCK_SIZE]);
                             for packet_i in 0..USB_PACKET_COUNT_PER_LOGICAL_BLOCK {
                                 let start_index = (packet_i * USB_MAX_PACKET_SIZE);
                                 let end_index = ((packet_i + 1) * USB_MAX_PACKET_SIZE);
                                 // 範囲がUSB_BLOCK_SIZEを超えないように修正
-                                let end_index = end_index.min(USB_BLOCK_SIZE);
+                                let end_index = end_index.min(USB_MSC_LOGICAL_BLOCK_SIZE);
 
                                 // データを受け取る
                                 let Ok(read_resp) =

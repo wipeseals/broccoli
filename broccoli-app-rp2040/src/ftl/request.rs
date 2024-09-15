@@ -4,6 +4,8 @@ use core::option::{
     Option::{None, Some},
 };
 
+use trait_variant;
+
 /// Data Transfer Request ID
 #[derive(Clone, Copy, Eq, PartialEq, defmt::Format)]
 pub enum DataRequestId {

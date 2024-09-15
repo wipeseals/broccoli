@@ -1,3 +1,4 @@
+#![feature(never_type)]
 #![allow(unused, dead_code)]
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]

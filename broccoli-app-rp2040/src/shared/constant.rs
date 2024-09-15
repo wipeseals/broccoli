@@ -27,9 +27,9 @@ pub const USB_NUM_BLOCKS: usize = if DEBUG_ENABLE_RAM_DISK {
     1024
 };
 /// USB device block size
-pub const USB_BLOCK_SIZE: usize = 512;
+pub const USB_MSC_LOGICAL_BLOCK_SIZE: usize = 512;
 /// USB device total size
-pub const USB_TOTAL_SIZE: usize = USB_NUM_BLOCKS * USB_BLOCK_SIZE;
+pub const USB_MSC_TOTAL_CAPACITY_BYTES: usize = USB_NUM_BLOCKS * USB_MSC_LOGICAL_BLOCK_SIZE;
 
 /// USB device vendor ID
 pub const USB_VID: u16 = 0xc0de;
@@ -46,7 +46,8 @@ pub const USB_MAX_POWER: u16 = 100;
 /// USB device maximum packet size
 pub const USB_MAX_PACKET_SIZE: usize = 64;
 /// USB device packet count per logical block (512byte / 64byte = 8)
-pub const USB_PACKET_COUNT_PER_LOGICAL_BLOCK: usize = (USB_BLOCK_SIZE / USB_MAX_PACKET_SIZE);
+pub const USB_PACKET_COUNT_PER_LOGICAL_BLOCK: usize =
+    (USB_MSC_LOGICAL_BLOCK_SIZE / USB_MAX_PACKET_SIZE);
 /// USB device vendor ID as a byte array
 pub const USB_VENDOR_ID: [u8; 8] = *b"broccoli";
 /// USB device product ID as a byte array
@@ -55,7 +56,7 @@ pub const USB_PRODUCT_ID: [u8; 16] = *b"wipeseals devapp";
 pub const USB_PRODUCT_DEVICE_VERSION: [u8; 4] = *b"0001";
 
 /// USB block size
-pub const LOGICAL_BLOCK_SIZE: usize = USB_BLOCK_SIZE;
+pub const LOGICAL_BLOCK_SIZE: usize = USB_MSC_LOGICAL_BLOCK_SIZE;
 /// USB block buffer count
 /// Write/ReadのOutstanding数分と処理中+1は確保しておく。 USB MSC <-> DataRequest/Response Arbiter 間としては
 /// Write/Readは同時には行わないので、Write/ReadのOutstanding数が最大の場合に全てのBufferが使われる
