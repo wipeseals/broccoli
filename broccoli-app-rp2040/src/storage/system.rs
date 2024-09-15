@@ -44,6 +44,27 @@ impl<
         }
     }
 
+    /// Get the number of blocks per ReadBuffer
+    pub const fn num_blocks_per_write_buffer(&self) -> usize {
+        NAND_PAGE_SIZE / LOGICAL_BLOCK_SIZE
+    }
+
+    /// Get the number of blocks per WriteBuffer
+    pub const fn num_blocks_per_read_buffer(&self) -> usize {
+        NAND_PAGE_SIZE / LOGICAL_BLOCK_SIZE
+    }
+
+    /// Get the total number of blocks in ReadBuffer
+    pub const fn total_blocks_in_write_buffer(&self) -> usize {
+        WRITE_BUFFER_N * self.num_blocks_per_write_buffer()
+    }
+
+    /// Get the total number of blocks in WriteBuffer
+    pub const fn total_blocks_in_read_buffer(&self) -> usize {
+        READ_BUFFER_N * self.num_blocks_per_read_buffer()
+    }
+
+    /// Run the main loop
     pub async fn run(&mut self) -> ! {
         loop {
             let request = self.req_receiver.receive().await;
