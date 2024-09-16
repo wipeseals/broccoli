@@ -4,8 +4,8 @@
 #![cfg_attr(not(test), no_main)]
 
 mod cpu;
-mod storage;
 mod shared;
+mod storage;
 mod usb;
 
 use core::default::Default;
