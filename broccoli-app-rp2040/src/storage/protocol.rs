@@ -160,3 +160,15 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> StorageResponse<ReqTag, DAT
         }
     }
 }
+
+/// Storage Request Handler
+#[cfg_attr(test, async_mock)]
+#[cfg_attr(test, async_trait)]
+#[trait_variant::make()]
+pub trait StorageHandler<ReqTag: Eq + PartialEq, const LOGICAL_BLOCK_SIZE: usize> {
+    /// Request handler
+    async fn request(
+        &mut self,
+        request: StorageRequest<ReqTag, LOGICAL_BLOCK_SIZE>,
+    ) -> StorageResponse<ReqTag, LOGICAL_BLOCK_SIZE>;
+}

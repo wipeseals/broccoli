@@ -3,7 +3,7 @@ use embassy_sync::channel::{DynamicReceiver, DynamicSender};
 use super::protocol::{StorageMsgId, StorageRequest, StorageResponse};
 
 /// Flash Storage Controller for FTL
-pub struct StorageSystem<
+pub struct StorageCoreHandler<
     'ch,
     ReqTag: Eq + PartialEq,
     const LOGICAL_BLOCK_SIZE: usize,
@@ -29,7 +29,14 @@ impl<
         const READ_BUFFER_N: usize,
         const WRITE_BUFFER_N: usize,
     >
-    StorageSystem<'ch, ReqTag, LOGICAL_BLOCK_SIZE, NAND_PAGE_SIZE, READ_BUFFER_N, WRITE_BUFFER_N>
+    StorageCoreHandler<
+        'ch,
+        ReqTag,
+        LOGICAL_BLOCK_SIZE,
+        NAND_PAGE_SIZE,
+        READ_BUFFER_N,
+        WRITE_BUFFER_N,
+    >
 {
     /// Create a new DataBuffer
     pub fn new(
