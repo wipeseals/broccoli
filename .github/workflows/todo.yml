@@ -1,0 +1,21 @@
+name: TODO
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main", "develop"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: TODO to Issue
+        uses: alstr/todo-to-issue-action@v4.13.3
+        id: "todo"
+        with:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLOSE_ISSUES: true
+          AUTO_ASSIGN: true

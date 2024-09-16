@@ -4,9 +4,11 @@ use core::option::{
     Option::{None, Some},
 };
 
+use trait_variant;
+
 /// Data Transfer Request ID
 #[derive(Clone, Copy, Eq, PartialEq, defmt::Format)]
-pub enum DataRequestId {
+pub enum StorageMsgId {
     Setup = 0,
     Echo = 1,
     Read = 2,
@@ -16,9 +18,9 @@ pub enum DataRequestId {
 
 /// Data Transfer Request
 #[derive(Eq, PartialEq, defmt::Format)]
-pub struct DataRequest<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> {
+pub struct StorageRequest<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> {
     /// Request ID
-    pub req_id: DataRequestId,
+    pub message_id: StorageMsgId,
     /// Request Tag
     pub req_tag: ReqTag,
     /// Logical Block Address
@@ -27,11 +29,11 @@ pub struct DataRequest<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> {
     pub data: [u8; DATA_SIZE],
 }
 
-impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataRequest<ReqTag, DATA_SIZE> {
+impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> StorageRequest<ReqTag, DATA_SIZE> {
     /// Create a new DataRequest for Setup
     pub fn setup(req_tag: ReqTag) -> Self {
         Self {
-            req_id: DataRequestId::Setup,
+            message_id: StorageMsgId::Setup,
             req_tag,
             lba: 0,
             data: [0; DATA_SIZE],
@@ -41,7 +43,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataRequest<ReqTag, DATA_SI
     /// Create a new DataRequest for Read
     pub fn read(req_tag: ReqTag, lba: usize) -> Self {
         Self {
-            req_id: DataRequestId::Read,
+            message_id: StorageMsgId::Read,
             req_tag,
             lba,
             data: [0; DATA_SIZE],
@@ -51,7 +53,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataRequest<ReqTag, DATA_SI
     /// Create a new DataRequest for Write
     pub fn write(req_tag: ReqTag, lba: usize, data: [u8; DATA_SIZE]) -> Self {
         Self {
-            req_id: DataRequestId::Write,
+            message_id: StorageMsgId::Write,
             req_tag,
             lba,
             data,
@@ -61,7 +63,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataRequest<ReqTag, DATA_SI
     /// Create a new DataRequest for Flush
     pub fn flush(req_tag: ReqTag) -> Self {
         Self {
-            req_id: DataRequestId::Flush,
+            message_id: StorageMsgId::Flush,
             req_tag,
             lba: 0,
             data: [0; DATA_SIZE],
@@ -71,8 +73,9 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataRequest<ReqTag, DATA_SI
 
 /// Internal Transfer Error Code
 #[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
-pub enum DataRequestError {
+pub enum StorageResponseMetadata {
     NoError,
+    ReportSetupSuccess { num_blocks: usize },
     General,
     BufferAllocationFail,
     NandError,
@@ -85,24 +88,34 @@ pub enum DataRequestError {
 
 /// Internal Transfer Response
 #[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
-pub struct DataResponse<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> {
-    /// Request ID
-    pub req_id: DataRequestId,
-    /// Request Tag
+pub struct StorageResponse<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> {
+    /// Request ID (copy from Request)
+    pub message_id: StorageMsgId,
+    /// Request Tag (copy from Request)
     pub req_tag: ReqTag,
     /// Error Code
-    pub error: Option<DataRequestError>,
+    pub meta_data: Option<StorageResponseMetadata>,
     /// Data (for Read): Channelに使うためにはSized traitを満たす必要がありOption削除
     pub data: [u8; DATA_SIZE],
 }
 
-impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataResponse<ReqTag, DATA_SIZE> {
+impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> StorageResponse<ReqTag, DATA_SIZE> {
     /// Create a new DataResponse for Setup
     pub fn setup(req_tag: ReqTag) -> Self {
         Self {
-            req_id: DataRequestId::Setup,
+            message_id: StorageMsgId::Setup,
             req_tag,
-            error: None,
+            meta_data: None,
+            data: [0; DATA_SIZE],
+        }
+    }
+
+    /// Create a new DataResponse for Setup Success
+    pub fn report_setup_success(req_tag: ReqTag, num_blocks: usize) -> Self {
+        Self {
+            message_id: StorageMsgId::Setup,
+            req_tag,
+            meta_data: Some(StorageResponseMetadata::ReportSetupSuccess { num_blocks }),
             data: [0; DATA_SIZE],
         }
     }
@@ -110,9 +123,9 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataResponse<ReqTag, DATA_S
     /// Create a new DataResponse for Echo
     pub fn echo(req_tag: ReqTag) -> Self {
         Self {
-            req_id: DataRequestId::Echo,
+            message_id: StorageMsgId::Echo,
             req_tag,
-            error: None,
+            meta_data: None,
             data: [0; DATA_SIZE],
         }
     }
@@ -120,9 +133,9 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataResponse<ReqTag, DATA_S
     /// Create a new DataResponse for Read
     pub fn read(req_tag: ReqTag, data: [u8; DATA_SIZE]) -> Self {
         Self {
-            req_id: DataRequestId::Read,
+            message_id: StorageMsgId::Read,
             req_tag,
-            error: None,
+            meta_data: None,
             data,
         }
     }
@@ -130,9 +143,9 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataResponse<ReqTag, DATA_S
     /// Create a new DataResponse for Write
     pub fn write(req_tag: ReqTag) -> Self {
         Self {
-            req_id: DataRequestId::Write,
+            message_id: StorageMsgId::Write,
             req_tag,
-            error: None,
+            meta_data: None,
             data: [0; DATA_SIZE],
         }
     }
@@ -140,10 +153,22 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> DataResponse<ReqTag, DATA_S
     /// Create a new DataResponse for Flush
     pub fn flush(req_tag: ReqTag) -> Self {
         Self {
-            req_id: DataRequestId::Flush,
+            message_id: StorageMsgId::Flush,
             req_tag,
-            error: None,
+            meta_data: None,
             data: [0; DATA_SIZE],
         }
     }
+}
+
+/// Storage Request Handler
+#[cfg_attr(test, async_mock)]
+#[cfg_attr(test, async_trait)]
+#[trait_variant::make()]
+pub trait StorageHandler<ReqTag: Eq + PartialEq, const LOGICAL_BLOCK_SIZE: usize> {
+    /// Request handler
+    async fn request(
+        &mut self,
+        request: StorageRequest<ReqTag, LOGICAL_BLOCK_SIZE>,
+    ) -> StorageResponse<ReqTag, LOGICAL_BLOCK_SIZE>;
 }

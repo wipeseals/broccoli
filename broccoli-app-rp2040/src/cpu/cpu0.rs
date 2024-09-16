@@ -6,6 +6,7 @@ use embassy_rp::bind_interrupts;
 use embassy_rp::gpio::{Level, Output};
 use embassy_rp::interrupt;
 use embassy_rp::multicore::{spawn_core1, Stack};
+use embassy_rp::pac::usb;
 use embassy_rp::peripherals::USB;
 use embassy_rp::usb::{Driver, In, InterruptHandler, Out};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -19,246 +20,68 @@ use embassy_usb::{Builder, Config, Handler};
 use export::debug;
 use static_cell::StaticCell;
 
-use crate::ftl::request::{DataRequest, DataRequestError, DataRequestId, DataResponse};
 use crate::shared::constant::*;
-use crate::shared::datatype::{LedState, MscDataTransferTag};
+use crate::shared::datatype::{MscReqTag, StorageHandleDispatcher};
+use crate::shared::resouce::{
+    CHANNEL_STORAGE_RESPONSE_TO_USB_BULK, CHANNEL_USB_BULK_TO_STORAGE_REQUEST,
+};
+use crate::storage::protocol::{
+    StorageMsgId, StorageRequest, StorageResponse, StorageResponseMetadata,
+};
+use crate::storage::ramdisk_handler::RamDiskHandler;
 use crate::usb::msc::{BulkTransferRequest, MscBulkHandler, MscBulkHandlerConfig, MscCtrlHandler};
 
 // Control Transfer -> Bulk Transfer Channel
-static CHANNEL_CTRL_TO_BULK: Channel<
+static CHANNEL_USB_CTRL_TO_USB_BULK: Channel<
     CriticalSectionRawMutex,
     BulkTransferRequest,
     CHANNEL_CTRL_TO_BULK_N,
 > = Channel::new();
 
-/// Bulk Transfer -> Internal Request Channel
-static CHANNEL_MSC_TO_DATA_REQUEST: Channel<
-    CriticalSectionRawMutex,
-    DataRequest<MscDataTransferTag, USB_BLOCK_SIZE>,
-    CHANNEL_BULK_TO_DATA_REQUEST_N,
-> = Channel::new();
+/// Setup USB Bulk <---> StorageHandlerDispatcher Channel
+async fn setup_storage_request_response_channel(req_tag: MscReqTag) -> usize {
+    // wait for StorageHandler to be ready
+    let setup_tag = MscReqTag::new(0xaa995566, 0); // cbw_tag: dummy data
+    CHANNEL_USB_BULK_TO_STORAGE_REQUEST
+        .send(StorageRequest::setup(setup_tag))
+        .await;
+    let setup_resp = CHANNEL_STORAGE_RESPONSE_TO_USB_BULK.receive().await;
 
-/// Internal Request -> Bulk Transfer Channel
-static CHANNEL_MSC_RESPONSE_TO_BULK: Channel<
-    CriticalSectionRawMutex,
-    DataResponse<MscDataTransferTag, USB_BLOCK_SIZE>,
-    CHANNEL_DATA_RESPONSE_TO_BULK_N,
-> = Channel::new();
-
-/// USB Bulk Transfer to Internal Request Channel
-/// TODO: broccoli-core に移動?
-async fn data_request_task() {
-    // TODO: RAM Diskパターンは実装丸ごとわけないと分岐多くてやりづらいかもしれない
-    //       とりあえず、RAM Diskパターンのみ実装するが、Executor二登録する関数単位で分けるといいかもしれない
-    // RAM Disk Buffer for Debug
-
-    // FAT12
-    // refs. https://github.com/hathach/tinyusb/blob/master/examples/device/cdc_msc/src/msc_disk.c#L52
-
-    let readme_contents = b"Hello, broccoli!\n";
-    let mut ram_disk = [0u8; USB_TOTAL_SIZE];
-    ram_disk[0..512].copy_from_slice(
-        [
-            0xEB, 0x3C, 0x90, 0x4D, 0x53, 0x44, 0x4F, 0x53, 0x35, 0x2E, 0x30, 0x00, 0x02, 0x01,
-            0x01, 0x00, 0x01, 0x10, 0x00, 0x10, 0x00, 0xF8, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x29, 0x34, 0x12, 0x00,
-            0x00, b'B', b'r', b'o', b'c', b'c', b'o', b'l', b'i', b'M', b'S', b'C', 0x46, 0x41,
-            0x54, 0x31, 0x32, 0x20, 0x20, 0x20, 0x00,
-            0x00, // Zero up to 2 last bytes of FAT magic code
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x55, 0xAA,
-        ]
-        .as_ref(),
-    );
-    // lba1 fat12 table
-    ram_disk[512..512 + 5].copy_from_slice([0xF8, 0xFF, 0xFF, 0x00, 0x00].as_ref());
-    // lba2 root directory
-    ram_disk[1024..1024 + 64].copy_from_slice(
-        [
-            // first entry is volume label
-            b'B',
-            b'r',
-            b'o',
-            b'c',
-            b'c',
-            b'o',
-            b'l',
-            b'i',
-            b'M',
-            b'S',
-            b'C',
-            0x08,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x4F,
-            0x6D,
-            0x65,
-            0x43,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            // second entry is readme file
-            b'R',
-            b'E',
-            b'A',
-            b'D',
-            b'M',
-            b'E',
-            b' ',
-            b' ',
-            b'T',
-            b'X',
-            b'T',
-            0x20,
-            0x00,
-            0xC6,
-            0x52,
-            0x6D,
-            0x65,
-            0x43,
-            0x65,
-            0x43,
-            0x00,
-            0x00,
-            0x88,
-            0x6D,
-            0x65,
-            0x43,
-            0x02,
-            0x00,
-            (readme_contents.len() - 1) as u8,
-            0x00,
-            0x00,
-            0x00, // readme's files size (4 Bytes)
-        ]
-        .as_ref(),
-    );
-    // lba3 readme file
-    ram_disk[1536..1536 + readme_contents.len()].copy_from_slice(readme_contents);
-
-    loop {
-        let request = CHANNEL_MSC_TO_DATA_REQUEST.receive().await;
-        defmt::trace!("DataRequest: {:?}", request);
-
-        match request.req_id {
-            DataRequestId::Setup => {
-                // Setup
-                // RAM Diskでは何もしない
-                CHANNEL_MSC_RESPONSE_TO_BULK
-                    .send(DataResponse::setup(request.req_tag))
-                    .await
-            }
-            DataRequestId::Echo => {
-                CHANNEL_MSC_RESPONSE_TO_BULK
-                    .send(DataResponse::echo(request.req_tag))
-                    .await
-            }
-            DataRequestId::Read => {
-                let mut resp = DataResponse::read(request.req_tag, [0; USB_BLOCK_SIZE]);
-
-                let ram_offset_start = request.lba * USB_BLOCK_SIZE;
-                let ram_offset_end = ram_offset_start + USB_BLOCK_SIZE;
-
-                if ram_offset_end > ram_disk.len() {
-                    defmt::error!("Write out of range. lba: {}", request.lba);
-                    resp.error = Some(DataRequestError::OutOfRange { lba: request.lba });
-                } else {
-                    // データをRAM Diskからコピー
-                    resp.data
-                        .as_mut()
-                        .copy_from_slice(&ram_disk[ram_offset_start..ram_offset_end]);
-                }
-                defmt::debug!("Read: lba: {} data: {:?}", request.lba, resp.data);
-                // 応答
-                CHANNEL_MSC_RESPONSE_TO_BULK.send(resp).await;
-            }
-            DataRequestId::Write => {
-                let mut resp = DataResponse::write(request.req_tag);
-
-                let ram_offset_start = request.lba * USB_BLOCK_SIZE;
-                let ram_offset_end = ram_offset_start + USB_BLOCK_SIZE;
-
-                // 範囲外応答
-                if ram_offset_end > ram_disk.len() {
-                    defmt::error!("Write out of range. lba: {}", request.lba);
-                    resp.error = Some(DataRequestError::OutOfRange { lba: request.lba })
-                } else {
-                    // データをRAM Diskにコピーしてから応答
-                    ram_disk[ram_offset_start..ram_offset_end]
-                        .copy_from_slice(request.data.as_ref());
-                }
-                defmt::debug!("Write: lba: {} data: {:?}", request.lba, request.data);
-                // 応答
-                CHANNEL_MSC_RESPONSE_TO_BULK.send(resp).await;
-            }
-            DataRequestId::Flush => {
-                // Flush
-                // RAM Diskでは何もしない
-                CHANNEL_MSC_RESPONSE_TO_BULK
-                    .send(DataResponse::flush(request.req_tag))
-                    .await;
-            }
-        };
+    // setup完了時に報告された有効ブロック数をUSB Descriptorに設定する
+    match setup_resp.meta_data {
+        Some(StorageResponseMetadata::ReportSetupSuccess { num_blocks }) => num_blocks,
+        data => crate::panic!("Setup NG: {:?}", data),
     }
 }
 
-/// USB Control Transfer and Bulk Transfer Channel
-async fn usb_transport_task(driver: Driver<'static, USB>) {
-    // Create embassy-usb Config
+/// Create USB Config
+fn create_usb_config<'a>() -> Config<'a> {
     let mut config = Config::new(USB_VID, USB_PID);
     config.manufacturer = Some(USB_MANUFACTURER);
     config.product = Some(USB_PRODUCT);
     config.serial_number = Some(USB_SERIAL_NUMBER);
     config.max_power = USB_MAX_POWER;
     config.max_packet_size_0 = USB_MAX_PACKET_SIZE as u8;
+    config
+}
 
+/// USB Control Transfer and Bulk Transfer Channel
+async fn usb_transport_task(driver: Driver<'static, USB>) {
+    // wait for StorageHandler to be ready
+    crate::info!("Send StorageRequest(Seup) to StorageHandler");
+    let num_blocks = setup_storage_request_response_channel(MscReqTag::new(0xaa995566, 0)).await;
+
+    // Create embassy-usb Config
+    crate::info!("Setup USB Ctrl/Bulk Endpoint (num_blocks: {})", num_blocks);
+    let mut config = create_usb_config();
+
+    // Create USB Handler
     let mut config_descriptor = [0; 256];
     let mut bos_descriptor = [0; 256];
     let mut msos_descriptor = [0; 256];
     let mut control_buf = [0; 64];
 
-    let mut ctrl_handler = MscCtrlHandler::new(CHANNEL_CTRL_TO_BULK.dyn_sender());
+    let mut ctrl_handler = MscCtrlHandler::new(CHANNEL_USB_CTRL_TO_USB_BULK.dyn_sender());
     let mut builder = Builder::new(
         driver,
         config,
@@ -272,26 +95,25 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
             USB_VENDOR_ID,
             USB_PRODUCT_ID,
             USB_PRODUCT_DEVICE_VERSION,
-            USB_NUM_BLOCKS,
-            USB_BLOCK_SIZE,
+            num_blocks,
+            USB_LOGICAL_BLOCK_SIZE,
         ),
-        CHANNEL_CTRL_TO_BULK.dyn_receiver(),
-        CHANNEL_MSC_TO_DATA_REQUEST.dyn_sender(),
-        CHANNEL_MSC_RESPONSE_TO_BULK.dyn_receiver(),
+        CHANNEL_USB_CTRL_TO_USB_BULK.dyn_receiver(),
+        CHANNEL_USB_BULK_TO_STORAGE_REQUEST.dyn_sender(),
+        CHANNEL_STORAGE_RESPONSE_TO_USB_BULK.dyn_receiver(),
     );
     ctrl_handler.build(&mut builder, config, &mut bulk_handler);
 
+    // Run USB Handler
     let mut usb = builder.build();
     let usb_fut = usb.run();
     let bulk_fut = bulk_handler.run();
 
-    // Run everything concurrently.
     join(usb_fut, bulk_fut).await;
 }
 
 #[embassy_executor::task]
 pub async fn main_task(driver: Driver<'static, USB>) {
     let usb_transport_fut = usb_transport_task(driver);
-    let internal_request_fut = data_request_task();
-    join(usb_transport_fut, internal_request_fut).await;
+    usb_transport_fut.await
 }
