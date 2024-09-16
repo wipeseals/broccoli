@@ -1,6 +1,6 @@
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 
-use crate::storage::protocol::DataRequestError;
+use crate::storage::protocol::StorageResponseMetadata;
 
 /// SCSI command codes
 #[repr(u8)]
@@ -277,38 +277,38 @@ impl RequestSenseData {
     }
 
     /// Create RequestSenseData (Scsi specified) from DataRequestError (Internal)
-    pub fn from_data_request_error(data_request_error: DataRequestError) -> Self {
+    pub fn from_data_request_error(data_request_error: StorageResponseMetadata) -> Self {
         match data_request_error {
-            DataRequestError::NoError => Self::new(),
-            DataRequestError::General => Self::from(
+            StorageResponseMetadata::NoError => Self::new(),
+            StorageResponseMetadata::General => Self::from(
                 SenseKey::HardwareError,
                 AdditionalSenseCodeType::HardwareErrorGeneral,
             ),
-            DataRequestError::BufferAllocationFail => Self::from(
+            StorageResponseMetadata::BufferAllocationFail => Self::from(
                 SenseKey::VendorSpecific,
                 AdditionalSenseCodeType::HardwareErrorEmbeddedSoftware,
             ),
-            DataRequestError::NandError => Self::from(
+            StorageResponseMetadata::NandError => Self::from(
                 SenseKey::HardwareError,
                 AdditionalSenseCodeType::HardwareErrorGeneral,
             ),
-            DataRequestError::InvalidRequest => Self::from(
+            StorageResponseMetadata::InvalidRequest => Self::from(
                 SenseKey::IllegalRequest,
                 AdditionalSenseCodeType::IllegalRequestInvalidCommand,
             ),
-            DataRequestError::DataError => Self::from(
+            StorageResponseMetadata::DataError => Self::from(
                 SenseKey::HardwareError,
                 AdditionalSenseCodeType::HardwareErrorGeneral,
             ),
-            DataRequestError::NoData => Self::from(
+            StorageResponseMetadata::NoData => Self::from(
                 SenseKey::HardwareError,
                 AdditionalSenseCodeType::HardwareErrorGeneral,
             ),
-            DataRequestError::OutOfRange { lba } => Self::from(
+            StorageResponseMetadata::OutOfRange { lba } => Self::from(
                 SenseKey::IllegalRequest,
                 AdditionalSenseCodeType::IllegalRequestInParameters,
             ),
-            DataRequestError::NotImplemented => Self::from(
+            StorageResponseMetadata::NotImplemented => Self::from(
                 SenseKey::IllegalRequest,
                 AdditionalSenseCodeType::HardwareErrorEmbeddedSoftware,
             ),

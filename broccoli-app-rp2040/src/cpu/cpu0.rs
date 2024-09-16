@@ -25,7 +25,9 @@ use crate::shared::datatype::{MscReqTag, StorageHandleDispatcher};
 use crate::shared::resouce::{
     CHANNEL_STORAGE_RESPONSE_TO_USB_BULK, CHANNEL_USB_BULK_TO_STORAGE_REQUEST,
 };
-use crate::storage::protocol::{DataRequestError, StorageMsgId, StorageRequest, StorageResponse};
+use crate::storage::protocol::{
+    StorageMsgId, StorageRequest, StorageResponse, StorageResponseMetadata,
+};
 use crate::storage::ramdisk_handler::RamDiskHandler;
 use crate::usb::msc::{BulkTransferRequest, MscBulkHandler, MscBulkHandlerConfig, MscCtrlHandler};
 
@@ -36,16 +38,44 @@ static CHANNEL_USB_CTRL_TO_USB_BULK: Channel<
     CHANNEL_CTRL_TO_BULK_N,
 > = Channel::new();
 
-/// USB Control Transfer and Bulk Transfer Channel
-async fn usb_transport_task(driver: Driver<'static, USB>) {
-    // Create embassy-usb Config
+/// Setup USB Bulk <---> StorageHandlerDispatcher Channel
+async fn setup_storage_request_response_channel(req_tag: MscReqTag) -> usize {
+    // wait for StorageHandler to be ready
+    let setup_tag = MscReqTag::new(0xaa995566, 0); // cbw_tag: dummy data
+    CHANNEL_USB_BULK_TO_STORAGE_REQUEST
+        .send(StorageRequest::setup(setup_tag))
+        .await;
+    let setup_resp = CHANNEL_STORAGE_RESPONSE_TO_USB_BULK.receive().await;
+
+    // setup完了時に報告された有効ブロック数をUSB Descriptorに設定する
+    match setup_resp.meta_data {
+        Some(StorageResponseMetadata::ReportSetupSuccess { num_blocks }) => num_blocks,
+        data => crate::panic!("Setup NG: {:?}", data),
+    }
+}
+
+/// Create USB Config
+fn create_usb_config<'a>() -> Config<'a> {
     let mut config = Config::new(USB_VID, USB_PID);
     config.manufacturer = Some(USB_MANUFACTURER);
     config.product = Some(USB_PRODUCT);
     config.serial_number = Some(USB_SERIAL_NUMBER);
     config.max_power = USB_MAX_POWER;
     config.max_packet_size_0 = USB_MAX_PACKET_SIZE as u8;
+    config
+}
 
+/// USB Control Transfer and Bulk Transfer Channel
+async fn usb_transport_task(driver: Driver<'static, USB>) {
+    // wait for StorageHandler to be ready
+    crate::info!("Send StorageRequest(Seup) to StorageHandler");
+    let num_blocks = setup_storage_request_response_channel(MscReqTag::new(0xaa995566, 0)).await;
+
+    // Create embassy-usb Config
+    crate::info!("Setup USB Ctrl/Bulk Endpoint (num_blocks: {})", num_blocks);
+    let mut config = create_usb_config();
+
+    // Create USB Handler
     let mut config_descriptor = [0; 256];
     let mut bos_descriptor = [0; 256];
     let mut msos_descriptor = [0; 256];
@@ -65,8 +95,8 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
             USB_VENDOR_ID,
             USB_PRODUCT_ID,
             USB_PRODUCT_DEVICE_VERSION,
-            USB_NUM_BLOCKS,
-            USB_MSC_LOGICAL_BLOCK_SIZE,
+            num_blocks,
+            USB_LOGICAL_BLOCK_SIZE,
         ),
         CHANNEL_USB_CTRL_TO_USB_BULK.dyn_receiver(),
         CHANNEL_USB_BULK_TO_STORAGE_REQUEST.dyn_sender(),
@@ -74,6 +104,7 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
     );
     ctrl_handler.build(&mut builder, config, &mut bulk_handler);
 
+    // Run USB Handler
     let mut usb = builder.build();
     let usb_fut = usb.run();
     let bulk_fut = bulk_handler.run();

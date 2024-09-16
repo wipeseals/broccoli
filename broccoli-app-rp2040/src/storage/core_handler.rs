@@ -80,20 +80,20 @@ impl<
             StorageMsgId::Read => {
                 // Read
                 // TODO: NANDからデータを読み出す処理
-                let response = StorageResponse::read(request.req_tag, [0; LOGICAL_BLOCK_SIZE]);
-                response
+
+                StorageResponse::read(request.req_tag, [0; LOGICAL_BLOCK_SIZE])
             }
             StorageMsgId::Write => {
                 // Write
                 // TODO: NANDにデータを書き込む処理
-                let response = StorageResponse::write(request.req_tag);
-                response
+
+                StorageResponse::write(request.req_tag)
             }
             StorageMsgId::Flush => {
                 // Flush
                 // TODO: WriteBufferの内容をNANDに書き込む処理
-                let response = StorageResponse::flush(request.req_tag);
-                response
+
+                StorageResponse::flush(request.req_tag)
             }
         }
     }

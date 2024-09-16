@@ -73,7 +73,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> StorageRequest<ReqTag, DATA
 
 /// Internal Transfer Error Code
 #[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
-pub enum DataRequestError {
+pub enum StorageResponseMetadata {
     NoError,
     ReportSetupSuccess { num_blocks: usize },
     General,
@@ -94,7 +94,7 @@ pub struct StorageResponse<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> {
     /// Request Tag (copy from Request)
     pub req_tag: ReqTag,
     /// Error Code
-    pub error: Option<DataRequestError>,
+    pub meta_data: Option<StorageResponseMetadata>,
     /// Data (for Read): Channelに使うためにはSized traitを満たす必要がありOption削除
     pub data: [u8; DATA_SIZE],
 }
@@ -105,7 +105,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> StorageResponse<ReqTag, DAT
         Self {
             message_id: StorageMsgId::Setup,
             req_tag,
-            error: None,
+            meta_data: None,
             data: [0; DATA_SIZE],
         }
     }
@@ -115,7 +115,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> StorageResponse<ReqTag, DAT
         Self {
             message_id: StorageMsgId::Setup,
             req_tag,
-            error: Some(DataRequestError::ReportSetupSuccess { num_blocks }),
+            meta_data: Some(StorageResponseMetadata::ReportSetupSuccess { num_blocks }),
             data: [0; DATA_SIZE],
         }
     }
@@ -125,7 +125,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> StorageResponse<ReqTag, DAT
         Self {
             message_id: StorageMsgId::Echo,
             req_tag,
-            error: None,
+            meta_data: None,
             data: [0; DATA_SIZE],
         }
     }
@@ -135,7 +135,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> StorageResponse<ReqTag, DAT
         Self {
             message_id: StorageMsgId::Read,
             req_tag,
-            error: None,
+            meta_data: None,
             data,
         }
     }
@@ -145,7 +145,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> StorageResponse<ReqTag, DAT
         Self {
             message_id: StorageMsgId::Write,
             req_tag,
-            error: None,
+            meta_data: None,
             data: [0; DATA_SIZE],
         }
     }
@@ -155,7 +155,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> StorageResponse<ReqTag, DAT
         Self {
             message_id: StorageMsgId::Flush,
             req_tag,
-            error: None,
+            meta_data: None,
             data: [0; DATA_SIZE],
         }
     }

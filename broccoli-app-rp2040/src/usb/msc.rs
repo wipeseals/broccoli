@@ -291,10 +291,10 @@ pub struct MscBulkHandler<'driver, 'ch, D: Driver<'driver>> {
     config: MscBulkHandlerConfig,
 
     /// Request Read/Write to Flash Translation Layer
-    data_request_sender: DynamicSender<'ch, StorageRequest<MscReqTag, USB_MSC_LOGICAL_BLOCK_SIZE>>,
+    data_request_sender: DynamicSender<'ch, StorageRequest<MscReqTag, USB_LOGICAL_BLOCK_SIZE>>,
     /// Response Read/Write from Flash Translation Layer
     data_response_receiver:
-        DynamicReceiver<'ch, StorageResponse<MscReqTag, USB_MSC_LOGICAL_BLOCK_SIZE>>,
+        DynamicReceiver<'ch, StorageResponse<MscReqTag, USB_LOGICAL_BLOCK_SIZE>>,
 }
 
 impl<'ch> Handler for MscCtrlHandler<'ch> {
@@ -398,13 +398,10 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
     pub fn new(
         config: MscBulkHandlerConfig,
         ctrl_to_bulk_request_receiver: DynamicReceiver<'ch, BulkTransferRequest>,
-        data_request_sender: DynamicSender<
-            'ch,
-            StorageRequest<MscReqTag, USB_MSC_LOGICAL_BLOCK_SIZE>,
-        >,
+        data_request_sender: DynamicSender<'ch, StorageRequest<MscReqTag, USB_LOGICAL_BLOCK_SIZE>>,
         data_response_receiver: DynamicReceiver<
             'ch,
-            StorageResponse<MscReqTag, USB_MSC_LOGICAL_BLOCK_SIZE>,
+            StorageResponse<MscReqTag, USB_LOGICAL_BLOCK_SIZE>,
         >,
     ) -> Self {
         Self {
@@ -475,7 +472,7 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
                 latest_sense_data = None;
 
                 // Command Transport
-                let mut read_buf = [0u8; USB_MSC_LOGICAL_BLOCK_SIZE]; // read buffer分確保
+                let mut read_buf = [0u8; USB_LOGICAL_BLOCK_SIZE]; // read buffer分確保
                 let Ok(read_cbw_size) = read_ep.read(&mut read_buf).await else {
                     defmt::error!("Read EP Error (CBW)");
                     phase_error_tag = None; // unknown tag
@@ -659,7 +656,7 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
                                 ));
                             }
                             // Check if there is an error
-                            if let Some(error) = resp.error {
+                            if let Some(error) = resp.meta_data {
                                 defmt::error!("Invalid Response: {:#x}", resp);
                                 latest_sense_data =
                                     Some(RequestSenseData::from_data_request_error(error));
@@ -671,7 +668,7 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
                                 let start_index = (packet_i * USB_MAX_PACKET_SIZE);
                                 let end_index = ((packet_i + 1) * USB_MAX_PACKET_SIZE);
                                 // 範囲がUSB_BLOCK_SIZEを超えないように修正
-                                let end_index = end_index.min(USB_MSC_LOGICAL_BLOCK_SIZE);
+                                let end_index = end_index.min(USB_LOGICAL_BLOCK_SIZE);
 
                                 // データを取り出して応答
                                 let packet_data = &read_data[start_index..end_index];
@@ -713,16 +710,13 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
                             let lba = write10_data.lba as usize + transfer_index;
                             // packet size分のデータを受け取る
                             let req_tag = MscReqTag::new(cbw_packet.tag, transfer_index as u32);
-                            let mut req = StorageRequest::write(
-                                req_tag,
-                                lba,
-                                [0u8; USB_MSC_LOGICAL_BLOCK_SIZE],
-                            );
+                            let mut req =
+                                StorageRequest::write(req_tag, lba, [0u8; USB_LOGICAL_BLOCK_SIZE]);
                             for packet_i in 0..USB_PACKET_COUNT_PER_LOGICAL_BLOCK {
                                 let start_index = (packet_i * USB_MAX_PACKET_SIZE);
                                 let end_index = ((packet_i + 1) * USB_MAX_PACKET_SIZE);
                                 // 範囲がUSB_BLOCK_SIZEを超えないように修正
-                                let end_index = end_index.min(USB_MSC_LOGICAL_BLOCK_SIZE);
+                                let end_index = end_index.min(USB_LOGICAL_BLOCK_SIZE);
 
                                 // データを受け取る
                                 let Ok(read_resp) =
@@ -758,7 +752,7 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
                                 ));
                             }
                             // Check if there is an error
-                            if let Some(error) = resp.error {
+                            if let Some(error) = resp.meta_data {
                                 defmt::error!("Invalid Response: {:#x}", resp);
                                 latest_sense_data =
                                     Some(RequestSenseData::from_data_request_error(error));

@@ -1,4 +1,4 @@
-use crate::{shared::constant::LOGICAL_BLOCK_SIZE, storage::protocol::DataRequestError};
+use crate::storage::protocol::StorageResponseMetadata;
 
 use crate::storage::protocol::{StorageHandler, StorageMsgId, StorageRequest, StorageResponse};
 
@@ -105,7 +105,7 @@ impl<ReqTag: Eq + PartialEq, const LOGICAL_BLOCK_SIZE: usize, const TOTAL_DATA_S
                 let ram_offset_end = ram_offset_start + LOGICAL_BLOCK_SIZE;
 
                 if ram_offset_end > self.data.len() {
-                    resp.error = Some(DataRequestError::OutOfRange { lba: request.lba });
+                    resp.meta_data = Some(StorageResponseMetadata::OutOfRange { lba: request.lba });
                 } else {
                     // データをRAM Diskからコピー
                     resp.data
@@ -122,7 +122,7 @@ impl<ReqTag: Eq + PartialEq, const LOGICAL_BLOCK_SIZE: usize, const TOTAL_DATA_S
 
                 // 範囲外応答
                 if ram_offset_end > self.data.len() {
-                    resp.error = Some(DataRequestError::OutOfRange { lba: request.lba })
+                    resp.meta_data = Some(StorageResponseMetadata::OutOfRange { lba: request.lba })
                 } else {
                     // データをRAM Diskにコピーしてから応答
                     self.data[ram_offset_start..ram_offset_end]

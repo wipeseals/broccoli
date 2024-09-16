@@ -14,7 +14,7 @@ use crate::{
 
 /// RAM Disk Debug Enable
 async fn ram_dispatch_task() {
-    let mut ramdisk: RamDiskHandler<USB_MSC_LOGICAL_BLOCK_SIZE, USB_MSC_TOTAL_CAPACITY_BYTES> =
+    let mut ramdisk: RamDiskHandler<USB_LOGICAL_BLOCK_SIZE, DEBUG_RAM_DISK_TOTAL_SIZE> =
         RamDiskHandler::new();
     ramdisk.set_fat12_sample_data();
     let mut dispatcher = StorageHandleDispatcher::new(
@@ -28,7 +28,7 @@ async fn ram_dispatch_task() {
 /// Core Storage Handler Task
 async fn core_dispatch_task() {
     let mut storage: StorageCoreHandler<
-        USB_MSC_LOGICAL_BLOCK_SIZE,
+        USB_LOGICAL_BLOCK_SIZE,
         NAND_PAGE_SIZE_USABLE,
         NAND_PAGE_READ_BUFFER_N,
         NAND_PAGE_WRITE_BUFFER_N,
