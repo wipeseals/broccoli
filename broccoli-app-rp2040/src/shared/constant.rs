@@ -4,21 +4,14 @@ pub const DEBUG_ENABLE_RAM_DISK: bool = true;
 pub const DEBUG_RAM_DISK_NUM_BLOCKS: usize = 16;
 
 /// Core1 task stack size
-pub const CORE1_TASK_STACK_SIZE: usize = 4096;
+pub const CORE1_TASK_STACK_SIZE: usize = 128 * 1024; // TODO: LBA -> Block Address変換とWrite/Read Bufferで調整
 
-/// LEDCTRL channel channel size
-pub const CHANNEL_LEDCTRL_N: usize = 1;
 /// USB Control Transfer to Bulk Transfer channel size
 pub const CHANNEL_CTRL_TO_BULK_N: usize = 2;
 /// USB Bulk Transfer to Internal Request channel size
-pub const CHANNEL_BULK_TO_DATA_REQUEST_N: usize = 4;
+pub const CHANNEL_USB_BULK_TO_STORAGE_REQUEST_N: usize = 4;
 /// USB Internal Request to Bulk Transfer channel size
-pub const CHANNEL_DATA_RESPONSE_TO_BULK_N: usize = 4;
-
-/// Buffer allocation fail retry duration in microseconds
-pub const BUFFER_ALLOCATION_FAIL_RETRY_DURATION_US: u64 = 100;
-/// Buffer allocation fail retry count max
-pub const BUFFER_ALLOCATION_FAIL_RETRY_COUNT_MAX: u32 = 100;
+pub const CHANNEL_STORAGE_RESPONSE_TO_BULK_N: usize = 4;
 
 /// USB device number of blocks
 pub const USB_NUM_BLOCKS: usize = if DEBUG_ENABLE_RAM_DISK {
@@ -61,10 +54,10 @@ pub const LOGICAL_BLOCK_SIZE: usize = USB_MSC_LOGICAL_BLOCK_SIZE;
 /// Write/ReadのOutstanding数分と処理中+1は確保しておく。 USB MSC <-> DataRequest/Response Arbiter 間としては
 /// Write/Readは同時には行わないので、Write/ReadのOutstanding数が最大の場合に全てのBufferが使われる
 pub const LOGICAL_BLOCK_BUFFER_N: usize =
-    if CHANNEL_BULK_TO_DATA_REQUEST_N > CHANNEL_DATA_RESPONSE_TO_BULK_N {
-        CHANNEL_BULK_TO_DATA_REQUEST_N + 1
+    if CHANNEL_USB_BULK_TO_STORAGE_REQUEST_N > CHANNEL_STORAGE_RESPONSE_TO_BULK_N {
+        CHANNEL_USB_BULK_TO_STORAGE_REQUEST_N + 1
     } else {
-        CHANNEL_DATA_RESPONSE_TO_BULK_N + 1
+        CHANNEL_STORAGE_RESPONSE_TO_BULK_N + 1
     };
 /// NAND page size usable
 /// TODO: broccoli-coreの値を参照して決定する。これ以外のパラメータ含む
@@ -72,8 +65,8 @@ pub const NAND_PAGE_SIZE_USABLE: usize = 2048;
 /// NAND page size metadata
 pub const NAND_PAGE_SIZE_METADATA: usize = 128;
 /// NAND page size total (usable + metadata)
-pub const NAND_PAGE_SIZE_TOTAL: usize = NAND_PAGE_SIZE_USABLE + NAND_PAGE_SIZE_METADATA;
-/// NAND page buffer size
-pub const NAND_PAGE_BUFFER_SIZE: usize = NAND_PAGE_SIZE_TOTAL;
-/// NAND page buffer count
-pub const NAND_PAGE_BUFFER_N: usize = 4;
+pub const TOTAL_NAND_PAGE_SIZE: usize = NAND_PAGE_SIZE_USABLE + NAND_PAGE_SIZE_METADATA;
+/// NAND page read buffer count (TOTAL_NAND_PAGE_SIZE)
+pub const NAND_PAGE_READ_BUFFER_N: usize = 8;
+/// NAND page write buffer count (TOTAL_NAND_PAGE_SIZE)
+pub const NAND_PAGE_WRITE_BUFFER_N: usize = 8;

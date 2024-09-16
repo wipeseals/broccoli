@@ -21,30 +21,19 @@ use export::debug;
 use static_cell::StaticCell;
 
 use crate::shared::constant::*;
-use crate::shared::datatype::{LedState, MscDataTransferTag, StorageHandleDispatcher};
+use crate::shared::datatype::{MscReqTag, StorageHandleDispatcher};
+use crate::shared::resouce::{
+    CHANNEL_STORAGE_RESPONSE_TO_USB_BULK, CHANNEL_USB_BULK_TO_STORAGE_REQUEST,
+};
 use crate::storage::protocol::{DataRequestError, StorageMsgId, StorageRequest, StorageResponse};
 use crate::storage::ramdisk_handler::RamDiskHandler;
 use crate::usb::msc::{BulkTransferRequest, MscBulkHandler, MscBulkHandlerConfig, MscCtrlHandler};
 
 // Control Transfer -> Bulk Transfer Channel
-static CHANNEL_CTRL_TO_BULK: Channel<
+static CHANNEL_USB_CTRL_TO_USB_BULK: Channel<
     CriticalSectionRawMutex,
     BulkTransferRequest,
     CHANNEL_CTRL_TO_BULK_N,
-> = Channel::new();
-
-/// Bulk Transfer -> Internal Request Channel
-static CHANNEL_MSC_TO_DATA_REQUEST: Channel<
-    CriticalSectionRawMutex,
-    StorageRequest<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>,
-    CHANNEL_BULK_TO_DATA_REQUEST_N,
-> = Channel::new();
-
-/// Internal Request -> Bulk Transfer Channel
-static CHANNEL_MSC_RESPONSE_TO_BULK: Channel<
-    CriticalSectionRawMutex,
-    StorageResponse<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>,
-    CHANNEL_DATA_RESPONSE_TO_BULK_N,
 > = Channel::new();
 
 /// USB Control Transfer and Bulk Transfer Channel
@@ -62,7 +51,7 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
     let mut msos_descriptor = [0; 256];
     let mut control_buf = [0; 64];
 
-    let mut ctrl_handler = MscCtrlHandler::new(CHANNEL_CTRL_TO_BULK.dyn_sender());
+    let mut ctrl_handler = MscCtrlHandler::new(CHANNEL_USB_CTRL_TO_USB_BULK.dyn_sender());
     let mut builder = Builder::new(
         driver,
         config,
@@ -79,9 +68,9 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
             USB_NUM_BLOCKS,
             USB_MSC_LOGICAL_BLOCK_SIZE,
         ),
-        CHANNEL_CTRL_TO_BULK.dyn_receiver(),
-        CHANNEL_MSC_TO_DATA_REQUEST.dyn_sender(),
-        CHANNEL_MSC_RESPONSE_TO_BULK.dyn_receiver(),
+        CHANNEL_USB_CTRL_TO_USB_BULK.dyn_receiver(),
+        CHANNEL_USB_BULK_TO_STORAGE_REQUEST.dyn_sender(),
+        CHANNEL_STORAGE_RESPONSE_TO_USB_BULK.dyn_receiver(),
     );
     ctrl_handler.build(&mut builder, config, &mut bulk_handler);
 
@@ -89,22 +78,7 @@ async fn usb_transport_task(driver: Driver<'static, USB>) {
     let usb_fut = usb.run();
     let bulk_fut = bulk_handler.run();
 
-    // Run ramdisk for debug
-    if DEBUG_ENABLE_RAM_DISK {
-        let mut ramdisk: RamDiskHandler<USB_MSC_LOGICAL_BLOCK_SIZE, USB_MSC_TOTAL_CAPACITY_BYTES> =
-            RamDiskHandler::new();
-        ramdisk.set_fat12_sample_data();
-        let mut dispatcher = StorageHandleDispatcher::new(
-            ramdisk,
-            CHANNEL_MSC_TO_DATA_REQUEST.dyn_receiver(),
-            CHANNEL_MSC_RESPONSE_TO_BULK.dyn_sender(),
-        );
-        let ramdisk_fut = dispatcher.run();
-        join(join(usb_fut, bulk_fut), ramdisk_fut).await;
-    } else {
-        // TODO: RAM Disk以外のデバイスを実装
-        join(usb_fut, bulk_fut).await;
-    }
+    join(usb_fut, bulk_fut).await;
 }
 
 #[embassy_executor::task]

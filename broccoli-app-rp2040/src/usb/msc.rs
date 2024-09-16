@@ -34,7 +34,7 @@ use export::debug;
 use static_cell::StaticCell;
 
 use crate::shared::constant::*;
-use crate::shared::datatype::MscDataTransferTag;
+use crate::shared::datatype::MscReqTag;
 use crate::storage::protocol::{StorageMsgId, StorageRequest, StorageResponse};
 use crate::usb::scsi::*;
 
@@ -291,11 +291,10 @@ pub struct MscBulkHandler<'driver, 'ch, D: Driver<'driver>> {
     config: MscBulkHandlerConfig,
 
     /// Request Read/Write to Flash Translation Layer
-    data_request_sender:
-        DynamicSender<'ch, StorageRequest<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>>,
+    data_request_sender: DynamicSender<'ch, StorageRequest<MscReqTag, USB_MSC_LOGICAL_BLOCK_SIZE>>,
     /// Response Read/Write from Flash Translation Layer
     data_response_receiver:
-        DynamicReceiver<'ch, StorageResponse<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>>,
+        DynamicReceiver<'ch, StorageResponse<MscReqTag, USB_MSC_LOGICAL_BLOCK_SIZE>>,
 }
 
 impl<'ch> Handler for MscCtrlHandler<'ch> {
@@ -401,11 +400,11 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
         ctrl_to_bulk_request_receiver: DynamicReceiver<'ch, BulkTransferRequest>,
         data_request_sender: DynamicSender<
             'ch,
-            StorageRequest<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>,
+            StorageRequest<MscReqTag, USB_MSC_LOGICAL_BLOCK_SIZE>,
         >,
         data_response_receiver: DynamicReceiver<
             'ch,
-            StorageResponse<MscDataTransferTag, USB_MSC_LOGICAL_BLOCK_SIZE>,
+            StorageResponse<MscReqTag, USB_MSC_LOGICAL_BLOCK_SIZE>,
         >,
     ) -> Self {
         Self {
@@ -641,8 +640,7 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
                         // TODO: channelに秋がある場合transfer_length分のRequest投げるTaskと、Responseを受け取るTaskのjoinにする
                         for transfer_index in 0..transfer_length {
                             let lba = read10_data.lba as usize + transfer_index;
-                            let req_tag =
-                                MscDataTransferTag::new(cbw_packet.tag, transfer_index as u32);
+                            let req_tag = MscReqTag::new(cbw_packet.tag, transfer_index as u32);
                             let req = StorageRequest::read(req_tag, lba);
 
                             self.data_request_sender.send(req).await;
@@ -714,8 +712,7 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
                         for transfer_index in 0..transfer_length {
                             let lba = write10_data.lba as usize + transfer_index;
                             // packet size分のデータを受け取る
-                            let req_tag =
-                                MscDataTransferTag::new(cbw_packet.tag, transfer_index as u32);
+                            let req_tag = MscReqTag::new(cbw_packet.tag, transfer_index as u32);
                             let mut req = StorageRequest::write(
                                 req_tag,
                                 lba,

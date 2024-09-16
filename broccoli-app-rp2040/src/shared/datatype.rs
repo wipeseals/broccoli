@@ -4,27 +4,20 @@ use embassy_sync::channel::{DynamicReceiver, DynamicSender};
 
 use crate::storage::protocol::{StorageHandler, StorageRequest, StorageResponse};
 
-/// USB MSC <--> Internal Request Data Transfer Channel
+/// USB MSC <--> Storage Request Tag
 #[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
-pub struct MscDataTransferTag {
+pub struct MscReqTag {
     /// CBW dCBWTag
     cbw_tag: u32,
     /// sequence number
     seq_num: u32,
 }
 
-impl MscDataTransferTag {
+impl MscReqTag {
     pub fn new(cbw_tag: u32, seq_num: u32) -> Self {
         Self { cbw_tag, seq_num }
     }
 }
-/// LED Illumination State
-pub enum LedState {
-    On,
-    Off,
-    Toggle,
-}
-
 /// Channel <-> StorageHandler Dispatcher
 /// This struct is used to dispatch StorageHandler from Channel.
 pub struct StorageHandleDispatcher<
