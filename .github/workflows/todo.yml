@@ -17,3 +17,5 @@ jobs:
         id: "todo"
         with:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLOSE_ISSUES: true
+          AUTO_ASSIGN: true
