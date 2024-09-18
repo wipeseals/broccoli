@@ -18,6 +18,19 @@ impl<
         const NAND_PAGE_SIZE: usize,
         const READ_BUFFER_N: usize,
         const WRITE_BUFFER_N: usize,
+    > Default
+    for NandStorageHandler<LOGICAL_BLOCK_SIZE, NAND_PAGE_SIZE, READ_BUFFER_N, WRITE_BUFFER_N>
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<
+        const LOGICAL_BLOCK_SIZE: usize,
+        const NAND_PAGE_SIZE: usize,
+        const READ_BUFFER_N: usize,
+        const WRITE_BUFFER_N: usize,
     > NandStorageHandler<LOGICAL_BLOCK_SIZE, NAND_PAGE_SIZE, READ_BUFFER_N, WRITE_BUFFER_N>
 {
     /// Create a new DataBuffer

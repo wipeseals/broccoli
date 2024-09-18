@@ -8,6 +8,14 @@ pub struct RamDiskHandler<const LOGICAL_BLOCK_SIZE: usize, const TOTAL_DATA_SIZE
     data: [u8; TOTAL_DATA_SIZE],
 }
 
+impl<const LOGICAL_BLOCK_SIZE: usize, const TOTAL_DATA_SIZE: usize> Default
+    for RamDiskHandler<LOGICAL_BLOCK_SIZE, TOTAL_DATA_SIZE>
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<const LOGICAL_BLOCK_SIZE: usize, const TOTAL_DATA_SIZE: usize>
     RamDiskHandler<LOGICAL_BLOCK_SIZE, TOTAL_DATA_SIZE>
 {
