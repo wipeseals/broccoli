@@ -64,6 +64,36 @@
             }
         },
         {
+            "label": "test debug",
+            "type": "shell",
+            "command": "cargo test",
+            "options": {
+                "cwd": "${workspaceFolder}/${input:crate}"
+            },
+            "problemMatcher": {
+                "base": "$rustc",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}/${input:crate}"
+                ]
+            }
+        },
+        {
+            "label": "test release",
+            "type": "shell",
+            "command": "cargo test --release",
+            "options": {
+                "cwd": "${workspaceFolder}/${input:crate}"
+            },
+            "problemMatcher": {
+                "base": "$rustc",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}/${input:crate}"
+                ]
+            }
+        },
+        {
             "label": "fmt",
             "type": "shell",
             "command": "cargo fmt -- --check",
