@@ -3,4 +3,5 @@
 #![cfg_attr(not(test), no_std)]
 
 pub mod nand;
+pub mod storage;
 pub mod util;

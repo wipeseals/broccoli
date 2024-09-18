@@ -39,7 +39,6 @@ pub const USB_PRODUCT_ID: [u8; 16] = *b"wipeseals devapp";
 pub const USB_PRODUCT_DEVICE_VERSION: [u8; 4] = *b"0001";
 
 /* NAND Setup */
-// TODO: broccoli-coreの値を参照して決定する。これ以外のパラメータ含む
 
 /// NAND page size write requester visible
 pub const NAND_PAGE_SIZE_USABLE: usize = 2048;

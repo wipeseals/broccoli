@@ -2,7 +2,7 @@ use core::cmp::{Eq, PartialEq};
 
 use embassy_sync::channel::{DynamicReceiver, DynamicSender};
 
-use crate::storage::protocol::{StorageHandler, StorageRequest, StorageResponse};
+use broccoli_core::storage::protocol::{StorageHandler, StorageRequest, StorageResponse};
 
 /// USB MSC <--> Storage Request Tag
 #[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]

@@ -1,6 +1,6 @@
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 
-use crate::storage::protocol::StorageResponseMetadata;
+use broccoli_core::storage::protocol::StorageResponseMetadata;
 
 /// SCSI command codes
 #[repr(u8)]
