@@ -81,9 +81,13 @@ pub struct NandStorageHandler<
     const READ_BUFFER_N: usize,
     const WRITE_BUFFER_N: usize,
 > {
+    /// Internal Read Buffer Status
     internal_read_status: BufferStatus<LOGICAL_BLOCK_SIZE, u8, usize>,
+    /// Internal Write Buffer Status
     internal_write_status: BufferStatus<LOGICAL_BLOCK_SIZE, u8, usize>,
+    /// Read Buffer Status (NAND_PAGE_SIZE * READ_BUFFER_N)
     host_read_statuses: [BufferStatus<LOGICAL_BLOCK_SIZE, u8, usize>; READ_BUFFER_N],
+    /// Write Buffer Status (NAND_PAGE_SIZE * WRITE_BUFFER_N)
     host_write_statuses: [BufferStatus<LOGICAL_BLOCK_SIZE, u8, usize>; WRITE_BUFFER_N],
 
     /// Internal Read Buffer (NAND_PAGE_SIZE)
@@ -94,6 +98,10 @@ pub struct NandStorageHandler<
     host_read_buffers: [[u8; NAND_PAGE_TOTAL_SIZE]; READ_BUFFER_N],
     /// Write Buffer (NAND_PAGE_SIZE * WRITE_BUFFER_N)
     host_write_buffers: [[u8; NAND_PAGE_TOTAL_SIZE]; WRITE_BUFFER_N],
+    // TODO: Add NAND Controller
+    // TODO: Add NAND Map
+    // TODO: Add NAND Block Assignment
+    // TODO: Channel for NAND Controller, ...
 }
 
 impl<
