@@ -5,7 +5,6 @@
 
 mod cpu;
 mod shared;
-mod storage;
 mod usb;
 
 use core::default::Default;

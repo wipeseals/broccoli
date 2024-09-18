@@ -6,8 +6,12 @@ use core::option::{
 
 use trait_variant;
 
+#[cfg(feature = "defmt")]
+use defmt::Format;
+
 /// Data Transfer Request ID
-#[derive(Clone, Copy, Eq, PartialEq, defmt::Format)]
+#[derive(Clone, Copy, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(Format))]
 pub enum StorageMsgId {
     Setup = 0,
     Echo = 1,
@@ -17,7 +21,8 @@ pub enum StorageMsgId {
 }
 
 /// Data Transfer Request
-#[derive(Eq, PartialEq, defmt::Format)]
+#[derive(Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(Format))]
 pub struct StorageRequest<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> {
     /// Request ID
     pub message_id: StorageMsgId,
@@ -72,7 +77,8 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> StorageRequest<ReqTag, DATA
 }
 
 /// Internal Transfer Error Code
-#[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
+#[derive(Copy, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(Format))]
 pub enum StorageResponseMetadata {
     NoError,
     ReportSetupSuccess { num_blocks: usize },
@@ -87,7 +93,8 @@ pub enum StorageResponseMetadata {
 }
 
 /// Internal Transfer Response
-#[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
+#[derive(Copy, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(Format))]
 pub struct StorageResponse<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> {
     /// Request ID (copy from Request)
     pub message_id: StorageMsgId,

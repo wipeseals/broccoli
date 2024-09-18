@@ -5,6 +5,9 @@ version = "0.3.0"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+
+broccoli-core = { path = "../broccoli-core", features = ["defmt"] }
+
 byteorder = { version = "1.4", default-features = false }
 embassy-embedded-hal = { version = "0.2.0", features = ["defmt"] }
 embassy-sync = { version = "0.6.0", features = ["defmt"] }

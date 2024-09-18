@@ -33,8 +33,8 @@ use static_cell::StaticCell;
 
 use crate::shared::constant::*;
 use crate::shared::datatype::MscReqTag;
-use crate::storage::protocol::{StorageMsgId, StorageRequest, StorageResponse};
 use crate::usb::scsi::*;
+use broccoli_core::storage::protocol::{StorageMsgId, StorageRequest, StorageResponse};
 
 // interfaceClass: 0x08 (Mass Storage)
 const MSC_INTERFACE_CLASS: u8 = 0x08;

@@ -25,11 +25,11 @@ use crate::shared::datatype::{MscReqTag, StorageHandleDispatcher};
 use crate::shared::resouce::{
     CHANNEL_STORAGE_RESPONSE_TO_USB_BULK, CHANNEL_USB_BULK_TO_STORAGE_REQUEST,
 };
-use crate::storage::protocol::{
+use crate::usb::msc::{BulkTransferRequest, MscBulkHandler, MscBulkHandlerConfig, MscCtrlHandler};
+use broccoli_core::storage::handler_ramdisk::RamDiskHandler;
+use broccoli_core::storage::protocol::{
     StorageMsgId, StorageRequest, StorageResponse, StorageResponseMetadata,
 };
-use crate::storage::ramdisk_handler::RamDiskHandler;
-use crate::usb::msc::{BulkTransferRequest, MscBulkHandler, MscBulkHandlerConfig, MscCtrlHandler};
 
 // Control Transfer -> Bulk Transfer Channel
 static CHANNEL_USB_CTRL_TO_USB_BULK: Channel<
