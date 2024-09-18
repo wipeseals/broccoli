@@ -138,3 +138,63 @@ impl<ReqTag: Eq + PartialEq, const LOGICAL_BLOCK_SIZE: usize, const TOTAL_DATA_S
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+
+    type StorageRequestTag = u32;
+
+    const LOGICAL_BLOCK_SIZE: usize = 512;
+    const TOTAL_DATA_SIZE: usize = 1024;
+
+    #[rstest]
+    #[tokio::test]
+    #[case(
+        StorageRequest::setup(0x00),
+        StorageResponse::report_setup_success(0x00, TOTAL_DATA_SIZE / LOGICAL_BLOCK_SIZE)
+    )]
+    #[case(
+        StorageRequest::read(0x01, 0),
+        StorageResponse::read(0x01, [0; 512])
+    )]
+    #[case(
+        StorageRequest::write(0x02, 0, [0; 512]),
+        StorageResponse::write(0x02)
+    )]
+    #[case(
+        StorageRequest::read(0x03, 0),
+        StorageResponse::read(0x03, [0; 512])
+    )]
+    #[case(StorageRequest::flush(0x04), StorageResponse::flush(0x04))]
+    async fn test_check_id_tag(
+        #[case] req: StorageRequest<StorageRequestTag, LOGICAL_BLOCK_SIZE>,
+        #[case] expected_resp: StorageResponse<StorageRequestTag, LOGICAL_BLOCK_SIZE>,
+    ) {
+        let mut handler = RamDiskHandler::<LOGICAL_BLOCK_SIZE, TOTAL_DATA_SIZE>::new();
+
+        let resp = handler.request(req).await;
+        assert_eq!(resp, expected_resp);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_write_read() {
+        let mut handler = RamDiskHandler::<LOGICAL_BLOCK_SIZE, TOTAL_DATA_SIZE>::new();
+        let mut write_data = [0u8; LOGICAL_BLOCK_SIZE];
+        write_data.copy_from_slice(
+            &(0..LOGICAL_BLOCK_SIZE)
+                .map(|i| (i & 0xff) as u8)
+                .collect::<Vec<u8>>(),
+        );
+
+        let write_req = StorageRequest::write(0x01, 1, write_data);
+        let write_resp = handler.request(write_req).await;
+        assert_eq!(write_resp, StorageResponse::write(0x01));
+
+        let read_req = StorageRequest::read(0x02, 1);
+        let read_resp = handler.request(read_req).await;
+        assert_eq!(read_resp, StorageResponse::read(0x02, write_data));
+    }
+}

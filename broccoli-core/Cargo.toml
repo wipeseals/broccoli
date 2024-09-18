@@ -14,11 +14,14 @@ defmt = { version = "0.3.8", optional = true }
 trait-variant = "0.1.2"
 
 [features]
-default = []
+default = ["ramdisk"]
 defmt = ["dep:defmt"]
+ramdisk = []
 
 [dev-dependencies]
 tokio = { version = "1.38.0", features = ["full"] }
 async-mock = "0.1.3"
 fake = "2.9.2"
 mockall = "0.12.1"
+rstest = "0.22.0"
+async-std = { version = "1.13.0", features = ["attributes"] }
