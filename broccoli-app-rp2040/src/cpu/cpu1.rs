@@ -27,7 +27,8 @@ async fn ram_dispatch_task() {
 async fn core_dispatch_task() {
     let mut storage: NandStorageHandler<
         USB_LOGICAL_BLOCK_SIZE,
-        NAND_PAGE_SIZE_USABLE,
+        NAND_PAGE_TOTAL_SIZE,
+        NAND_PAGE_SIZE_METADATA,
         NAND_PAGE_READ_BUFFER_N,
         NAND_PAGE_WRITE_BUFFER_N,
     > = NandStorageHandler::new();

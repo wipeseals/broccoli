@@ -45,7 +45,7 @@ pub const NAND_PAGE_SIZE_USABLE: usize = 2048;
 /// NAND page size metadata
 pub const NAND_PAGE_SIZE_METADATA: usize = 128;
 /// NAND page size total (usable + metadata)
-pub const NAND_TOTAL_PAGE_SIZE: usize = NAND_PAGE_SIZE_USABLE + NAND_PAGE_SIZE_METADATA;
+pub const NAND_PAGE_TOTAL_SIZE: usize = NAND_PAGE_SIZE_USABLE + NAND_PAGE_SIZE_METADATA;
 /// NAND page read buffer count (TOTAL_NAND_PAGE_SIZE)
 pub const NAND_PAGE_READ_BUFFER_N: usize = 8;
 /// NAND page write buffer count (TOTAL_NAND_PAGE_SIZE)
