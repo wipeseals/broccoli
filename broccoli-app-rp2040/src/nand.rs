@@ -1,2 +1,2 @@
-pub mod driver;
-pub mod pins;
+pub mod fw_driver;
+pub mod nand_pins;

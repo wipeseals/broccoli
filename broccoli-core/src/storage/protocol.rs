@@ -135,6 +135,15 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> StorageResponse<ReqTag, DAT
         }
     }
 
+    pub fn report_setup_failed(req_tag: ReqTag) -> Self {
+        Self {
+            message_id: StorageMsgId::Setup,
+            req_tag,
+            meta_data: Some(StorageResponseMetadata::NandError),
+            data: [0; DATA_SIZE],
+        }
+    }
+
     /// Create a new DataResponse for Echo
     pub fn echo(req_tag: ReqTag) -> Self {
         Self {

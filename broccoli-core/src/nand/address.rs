@@ -64,19 +64,16 @@ pub const MIN_BYTES_PER_IC: usize = MIN_BLOCKS_PER_IC * BYTES_PER_BLOCK;
 bitfield! {
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
     /// Chip Column Address.
-    pub struct Address(u32);
-    /// column address: 12bit 0 ~ 2176
-    pub column, set_column: 11,0;
-    /// chip_id: 4bit 0 ~ 15 (実際には0,1しか使わない)
-    /// reservedを間借りしており、Addressing時はLow固定にする必要あり
-    pub chip_id, set_chip_id: 15,12;
+    pub struct NandAddress(u32);
+    /// column address: 12bit (reserved 4bit) 0 ~ 2176
+    pub column, set_column: 15,0;
     /// page address: 6bit 0 ~ 63
     pub page, set_page: 21,16;
     /// block address: 10bit 0 ~ 1023
     pub block, set_block: 31,22;
 }
 
-impl Address {
+impl NandAddress {
     pub fn raw(&self) -> u32 {
         self.0
     }
@@ -100,7 +97,7 @@ impl Address {
             | ((slice[1] as u32) << 8)
             | ((slice[2] as u32) << 16)
             | ((slice[3] as u32) << 24);
-        Address(data)
+        NandAddress(data)
     }
 
     /// Pack Page Address into slice.
@@ -117,11 +114,11 @@ impl Address {
     /// Unpack slice into Page Address.
     pub fn from_page_slice(slice: &[u8; 2]) -> Self {
         let data = ((slice[0] as u32) << 16) | ((slice[1] as u32) << 24);
-        Address(data)
+        NandAddress(data)
     }
     /// address from block
     pub fn from_block(block: u16) -> Self {
-        let mut addr = Address(0);
+        let mut addr = NandAddress(0);
         addr.set_block(block as u32);
         addr
     }
@@ -134,7 +131,7 @@ mod tests {
 
     #[test]
     fn test_to_full_slice() {
-        let mut address = Address::default();
+        let mut address = NandAddress::default();
         address.set_column(0b101010101010);
         address.set_page(0b110011001100);
         address.set_block(0b111100001111);
@@ -156,7 +153,7 @@ mod tests {
         let packed = [0b10101010, 0b11001100, 0b11110000, 0b11111111];
         //                     column[7:0]  column[12:9]  block[1:0] block[15:2]
         //                                                page[5:0]
-        let address = Address::from_full_slice(&packed);
+        let address = NandAddress::from_full_slice(&packed);
         assert_eq!(address.column(), 0b0000_1100_10101010);
         assert_eq!(address.page(), 0b110000);
         assert_eq!(address.block(), 0b11111111_11);

@@ -51,6 +51,38 @@ pub const NAND_PAGE_READ_BUFFER_N: usize = 8;
 /// NAND page write buffer count (TOTAL_NAND_PAGE_SIZE)
 pub const NAND_PAGE_WRITE_BUFFER_N: usize = 8;
 
+/* NAND AC/Function Characteristic */
+
+/// ID read bytes (for TC58NVG0S3HTA00)
+pub const ID_READ_CMD_BYTES: usize = 5;
+/// ID read expect data (for TC58NVG0S3HTA00)
+///
+/// | Description            | Hex Data |
+/// | ---------------------- | -------- |
+/// | Maker Code             | 0x98     |
+/// | Device Code            | 0xF1     |
+/// | Chip Number, Cell Type | 0x80     |
+/// | Page Size, Block Size  | 0x15     |
+/// | District Number        | 0x72     |
+pub const ID_READ_EXPECT_DATA: [u8; ID_READ_CMD_BYTES] = [0x98, 0xF1, 0x80, 0x15, 0x72];
+/// Delay for command latch
+/// t_XXX worst (w/o t_RST) = 100ns
+pub const DELAY_US_FOR_COMMAND_LATCH: u64 = 1;
+/// Delay for reset
+/// t_RST = ~500us
+pub const DELAY_US_FOR_RESET: u64 = 500;
+/// Delay for wait busy (read)
+/// t_R=25us,, t_DCBSYR1=25us, t_DCBSYR2=30us,
+pub const DELAY_US_FOR_WAIT_BUSY_READ: u64 = 30;
+/// Delay for wait busy (write)
+/// t_PROG = 700us, t_DCBSYW2 = 700us
+pub const DELAY_US_FOR_WAIT_BUSY_WRITE: u64 = 700;
+/// Delay for wait busy (erase)
+/// t_BERASE = 5ms (5,000us)
+pub const DELAY_US_FOR_WAIT_BUSY_ERASE: u64 = 5000;
+/// Timeout limit for wait busy
+pub const TIMEOUT_LIMIT_US_FOR_WAIT_BUSY: u64 = 1_000_000;
+
 /* Debug Setup */
 
 /// Enable RAM Disk for debug

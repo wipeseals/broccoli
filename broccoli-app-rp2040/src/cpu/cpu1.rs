@@ -1,5 +1,11 @@
+use broccoli_core::nand::commander::NandCommander;
 use embassy_futures::join::join;
 use embassy_rp::gpio::{Level, Output};
+
+use crate::nand::fw_driver::NandIoFwDriver;
+use crate::nand::nand_pins::NandIoPins;
+// Import the macro from the appropriate module
+use crate::nand::{init_nandio_pins, NandIoPins};
 
 use crate::shared::{
     constant::*,
@@ -24,14 +30,10 @@ async fn ram_dispatch_task() {
 }
 
 /// Core Storage Handler Task
-async fn core_dispatch_task() {
-    let mut storage: NandStorageHandler<
-        USB_LOGICAL_BLOCK_SIZE,
-        NAND_PAGE_TOTAL_SIZE,
-        NAND_PAGE_SIZE_METADATA,
-        NAND_PAGE_READ_BUFFER_N,
-        NAND_PAGE_WRITE_BUFFER_N,
-    > = NandStorageHandler::new();
+async fn core_dispatch_task(nandio_pins: NandIoPins<'static>) {
+    let fw_driver = NandIoFwDriver::new(nandio_pins);
+
+    let mut storage = NandStorageHandler::new(&mut fw_driver);
 
     // TODO: Implement NAND Flash Communication
 
@@ -44,12 +46,12 @@ async fn core_dispatch_task() {
 }
 
 #[embassy_executor::task]
-pub async fn main_task(led: Output<'static>) {
+pub async fn main_task(nandio_pins: NandIoPins<'static>, led: Output<'static>) {
     if DEBUG_ENABLE_RAM_DISK {
         crate::info!("RAM Disk Enabled");
         ram_dispatch_task().await;
     } else {
         crate::info!("RAM Disk Disabled");
-        core_dispatch_task().await;
+        core_dispatch_task(nandio_pins).await;
     }
 }

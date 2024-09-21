@@ -1,5 +1,7 @@
 use core::mem;
 
+use crate::nand::{commander::NandCommander, io_driver::NandIoDriver};
+
 use super::protocol::{StorageHandler, StorageMsgId, StorageRequest, StorageResponse};
 
 /// Buffer Assigning Type for NandStorageHandler
@@ -134,176 +136,33 @@ impl<
     }
 }
 
-pub struct NandAddressMapper<
-    /// Logical Address
-    LogicalAddr: Copy + Clone + Eq + PartialEq,
-    /// NAND Address
-    NandAddr: Copy + Clone + Eq + PartialEq,
-    /// page bytes (data + spare bytes)
-    const PAGE_TOTAL_SIZE: usize,
-    /// page bytes (spare bytes)
-    const PAGE_META_SIZE: usize,
-    /// Number of pages per block
-    const NUM_PAGES_PER_BLOCK: usize,
-    /// Number of blocks per IC
-    const NUM_BLOCKS_PER_IC: usize,
-    /// Number of ICs
-    const NUM_IC: usize,
-    /// Number of blocks per IC
-    const LOGICAL_BLOCK_SIZE: usize,
-    /// Number of logical addresses
-    const NUM_LOGICAL_ADDR: usize,
-    /// Number of blocks per IC
-    const CACHE_BUFFFER_N: usize,
-> {
-    // pub map_page_address_table: [Option<NandAddr>; NUM_LOGICAL_ADDR/]
-}
-
-impl<
-        LogicalAddr: Copy + Clone + Eq + PartialEq,
-        NandAddr: Copy + Clone + Eq + PartialEq,
-        const PAGE_TOTAL_SIZE: usize,
-        const PAGE_META_SIZE: usize,
-        const NUM_PAGES_PER_BLOCK: usize,
-        const NUM_BLOCKS_PER_IC: usize,
-        const NUM_IC: usize,
-        const LOGICAL_BLOCK_SIZE: usize,
-        const NUM_LOGICAL_ADDR: usize,
-        const CACHE_BUFFFER_N: usize,
-    >
-    NandAddressMapper<
-        LogicalAddr,
-        NandAddr,
-        PAGE_TOTAL_SIZE,
-        PAGE_META_SIZE,
-        NUM_PAGES_PER_BLOCK,
-        NUM_BLOCKS_PER_IC,
-        NUM_IC,
-        LOGICAL_BLOCK_SIZE,
-        NUM_LOGICAL_ADDR,
-        CACHE_BUFFFER_N,
-    >
-{
-    /// NAND Pageのうち、データ部分のサイズ
-    pub const fn page_data_size(&self) -> usize {
-        PAGE_TOTAL_SIZE - PAGE_META_SIZE
-    }
-    /// NAND PageあたりのNandAddrのエントリ数
-    pub const fn map_entries_per_page(&self) -> usize {
-        (PAGE_TOTAL_SIZE - PAGE_META_SIZE) / mem::size_of::<NandAddr>()
-    }
-
-    /// NAND PageあたりのNandAddrエントリが示せる容量
-    pub const fn map_capacity_per_page(&self) -> usize {
-        (PAGE_TOTAL_SIZE - PAGE_META_SIZE) / mem::size_of::<NandAddr>()
-            * ((PAGE_TOTAL_SIZE - PAGE_META_SIZE) / LOGICAL_BLOCK_SIZE) // TODO: 関数分割したいがエラーになる
-    }
-}
-
 /// Flash Storage Controller for FTL
 /// Buffer Size == Nand Page Size
 /// Logical Block Size <= Nand Page Size
-pub struct NandStorageHandler<
-    LogicalAddr: Copy + Clone + Eq + PartialEq,
-    NandAddr: Copy + Clone + Eq + PartialEq,
-    const PAGE_TOTAL_SIZE: usize,
-    const PAGE_META_SIZE: usize,
-    const NUM_PAGES_PER_BLOCK: usize,
-    const NUM_BLOCKS_PER_IC: usize,
-    const NUM_IC: usize,
-    const LOGICAL_BLOCK_SIZE: usize,
-    const NUM_LOGICAL_ADDR: usize,
-    const CACHE_BUFFFER_N: usize,
-    const READ_BUFFER_N: usize,
-    const WRITE_BUFFER_N: usize,
-> {
-    // TODO: Add NAND Controller
+pub struct NandStorageHandler<'d, Driver: NandIoDriver, const MAX_IC_NUM: usize> {
+    /// NAND IO Commander
+    commander: NandCommander<'d, Driver, MAX_IC_NUM>,
     // TODO: Add NAND Map
     // TODO: Add NAND Block Assignment
     // TODO: Channel for NAND Controller, ...
 }
 
-impl<
-        const LOGICAL_BLOCK_SIZE: usize,
-        const NAND_PAGE_TOTAL_SIZE: usize,
-        const NAND_PAGE_METADATA_SIZE: usize,
-        const READ_BUFFER_N: usize,
-        const WRITE_BUFFER_N: usize,
-    > Default
-    for NandStorageHandler<
-        LOGICAL_BLOCK_SIZE,
-        NAND_PAGE_TOTAL_SIZE,
-        NAND_PAGE_METADATA_SIZE,
-        READ_BUFFER_N,
-        WRITE_BUFFER_N,
-    >
-{
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<
-        const LOGICAL_BLOCK_SIZE: usize,
-        const NAND_PAGE_TOTAL_SIZE: usize,
-        const NAND_PAGE_METADATA_SIZE: usize,
-        const READ_BUFFER_N: usize,
-        const WRITE_BUFFER_N: usize,
-    >
-    NandStorageHandler<
-        LOGICAL_BLOCK_SIZE,
-        NAND_PAGE_TOTAL_SIZE,
-        NAND_PAGE_METADATA_SIZE,
-        READ_BUFFER_N,
-        WRITE_BUFFER_N,
-    >
-{
-    /// Create a new DataBuffer
-    pub const fn new() -> Self {
-        if (NAND_PAGE_TOTAL_SIZE - NAND_PAGE_METADATA_SIZE) < LOGICAL_BLOCK_SIZE {
-            panic!("NAND_PAGE_SIZE must be larger than LOGICAL_BLOCK_SIZE");
-        }
+impl<'d, Driver: NandIoDriver, const MAX_IC_NUM: usize> NandStorageHandler<'d, Driver, MAX_IC_NUM> {
+    /// Create a new NandStorageHandler
+    pub fn new(driver: &'d mut Driver) -> Self {
         Self {
-            internal_read_status: CacheBuffer::new(),
-            internal_write_status: CacheBuffer::new(),
-            host_read_statuses: [CacheBuffer::new(); READ_BUFFER_N],
-            host_write_statuses: [CacheBuffer::new(); WRITE_BUFFER_N],
-            internal_read_buffer: [0; NAND_PAGE_TOTAL_SIZE],
-            internal_write_buffer: [0; NAND_PAGE_TOTAL_SIZE],
-            host_read_buffers: [[0; NAND_PAGE_TOTAL_SIZE]; READ_BUFFER_N],
-            host_write_buffers: [[0; NAND_PAGE_TOTAL_SIZE]; WRITE_BUFFER_N],
+            commander: NandCommander::new(driver),
         }
-    }
-
-    pub const fn usable_bytes_per_buffer(&self) -> usize {
-        NAND_PAGE_TOTAL_SIZE - NAND_PAGE_METADATA_SIZE
-    }
-    /// Get the number of blocks per ReadBuffer
-    pub const fn logical_blocks_per_write_buffer(&self) -> usize {
-        self.usable_bytes_per_buffer() / LOGICAL_BLOCK_SIZE
-    }
-
-    /// Get the number of blocks per WriteBuffer
-    pub const fn logical_blocks_per_read_buffer(&self) -> usize {
-        self.usable_bytes_per_buffer() / LOGICAL_BLOCK_SIZE
     }
 }
 
 impl<
+        'd,
+        Driver: NandIoDriver,
+        const MAX_IC_NUM: usize,
         ReqTag: Eq + PartialEq,
         const LOGICAL_BLOCK_SIZE: usize,
-        const NAND_PAGE_SIZE: usize,
-        const NAND_PAGE_METADATA_SIZE: usize,
-        const READ_BUFFER_N: usize,
-        const WRITE_BUFFER_N: usize,
-    > StorageHandler<ReqTag, LOGICAL_BLOCK_SIZE>
-    for NandStorageHandler<
-        LOGICAL_BLOCK_SIZE,
-        NAND_PAGE_SIZE,
-        NAND_PAGE_METADATA_SIZE,
-        READ_BUFFER_N,
-        WRITE_BUFFER_N,
-    >
+    > StorageHandler<ReqTag, LOGICAL_BLOCK_SIZE> for NandStorageHandler<'d, Driver, MAX_IC_NUM>
 {
     /// Request handler
     async fn request(
@@ -312,11 +171,16 @@ impl<
     ) -> StorageResponse<ReqTag, LOGICAL_BLOCK_SIZE> {
         match request.message_id {
             StorageMsgId::Setup => {
-                // TODO: NANDの初期化処理
-                StorageResponse::report_setup_success(
-                    request.req_tag,
-                    ((1024 - 100) * 64 * 2048 / LOGICAL_BLOCK_SIZE), // TODO: 仮の値. NANDの容量とブロックサイズ、管理データ向けに割り当てた容量から計算する
-                )
+                // setup NAND Commander(Driver)
+                match self.commander.setup().await {
+                    Ok(num_cs) => {
+                        StorageResponse::report_setup_success(
+                            request.req_tag,
+                            (num_cs * (1024 - 100) * 64 * 2048 / LOGICAL_BLOCK_SIZE), // TODO: 仮の値. NANDの容量とブロックサイズ、管理データ向けに割り当てた容量から計算する
+                        )
+                    }
+                    Err(_) => StorageResponse::report_setup_failed(request.req_tag),
+                }
             }
             StorageMsgId::Echo => {
                 // Echoは何もしない
