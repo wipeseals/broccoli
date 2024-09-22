@@ -86,7 +86,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> StorageRequest<ReqTag, DATA
 #[derive(Copy, Clone, Eq, PartialEq)]
 #[cfg_attr(test, derive(Debug))]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum StorageResponseMetadata {
+pub enum StorageResponseReport {
     NoError,
     ReportSetupSuccess { num_blocks: usize },
     General,
@@ -109,7 +109,7 @@ pub struct StorageResponse<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> {
     /// Request Tag (copy from Request)
     pub req_tag: ReqTag,
     /// Error Code
-    pub meta_data: Option<StorageResponseMetadata>,
+    pub meta_data: Option<StorageResponseReport>,
     /// Data (for Read): Channelに使うためにはSized traitを満たす必要がありOption削除
     pub data: [u8; DATA_SIZE],
 }
@@ -130,7 +130,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> StorageResponse<ReqTag, DAT
         Self {
             message_id: StorageMsgId::Setup,
             req_tag,
-            meta_data: Some(StorageResponseMetadata::ReportSetupSuccess { num_blocks }),
+            meta_data: Some(StorageResponseReport::ReportSetupSuccess { num_blocks }),
             data: [0; DATA_SIZE],
         }
     }
@@ -139,7 +139,7 @@ impl<ReqTag: Eq + PartialEq, const DATA_SIZE: usize> StorageResponse<ReqTag, DAT
         Self {
             message_id: StorageMsgId::Setup,
             req_tag,
-            meta_data: Some(StorageResponseMetadata::NandError),
+            meta_data: Some(StorageResponseReport::NandError),
             data: [0; DATA_SIZE],
         }
     }

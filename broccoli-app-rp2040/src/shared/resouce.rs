@@ -2,7 +2,7 @@ use core::cell::RefCell;
 use core::sync::atomic::AtomicBool;
 
 use crate::shared::constant::*;
-use broccoli_core::storage::protocol::{StorageRequest, StorageResponse};
+use broccoli_core::common::storage_req::{StorageRequest, StorageResponse};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
 use embassy_sync::mutex::Mutex;

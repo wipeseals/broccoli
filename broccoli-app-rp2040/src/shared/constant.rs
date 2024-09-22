@@ -83,6 +83,14 @@ pub const ID_READ_CMD_BYTES: usize = 5;
 /// | Page Size, Block Size  | 0x15     |
 /// | District Number        | 0x72     |
 pub const ID_READ_EXPECT_DATA: [u8; ID_READ_CMD_BYTES] = [0x98, 0xF1, 0x80, 0x15, 0x72];
+
+/// Column Addressing Transfer cycles
+pub const NAND_COLUMN_TRANSFER_BYTES: usize = 2;
+/// Page(PA0~PA15) Address Transfer cycles
+pub const NAND_PAGE_TRANSFER_BYTES: usize = 2;
+/// Total Address Transfer cycles
+pub const NAND_TOTAL_ADDR_TRANSFER_BYTES: usize =
+    NAND_COLUMN_TRANSFER_BYTES + NAND_PAGE_TRANSFER_BYTES;
 /// Delay for command latch
 /// t_XXX worst (w/o t_RST) = 100ns
 pub const DELAY_US_FOR_COMMAND_LATCH: u64 = 1;

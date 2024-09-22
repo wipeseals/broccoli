@@ -9,14 +9,16 @@ async-trait = "0.1.80"
 bit_field = "0.10.2"
 bitfield = "0.15.0"
 bitflags = "2.5.0"
+byteorder = { version = "1.4", default-features = false }
 defmt = { version = "0.3.8", optional = true }
 
 trait-variant = "0.1.2"
 
 [features]
-default = ["ramdisk"]
+default = ["ramdisk", "ramdisk_sample_data"]
 defmt = ["dep:defmt"]
 ramdisk = []
+ramdisk_sample_data = []
 
 [dev-dependencies]
 tokio = { version = "1.38.0", features = ["full"] }

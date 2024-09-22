@@ -1,8 +1,10 @@
 use core::mem;
 
-use crate::nand::{commander::NandCommander, io_driver::NandIoDriver};
+use crate::commander::NandCommander;
+use crate::common::io_address::IoAddress;
+use crate::common::io_driver::{NandIoDriver, NandStatusReadResult};
 
-use super::protocol::{StorageHandler, StorageMsgId, StorageRequest, StorageResponse};
+use crate::common::storage_req::{StorageHandler, StorageMsgId, StorageRequest, StorageResponse};
 
 /// Buffer Assigning Type for NandStorageHandler
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -139,15 +141,28 @@ impl<
 /// Flash Storage Controller for FTL
 /// Buffer Size == Nand Page Size
 /// Logical Block Size <= Nand Page Size
-pub struct NandStorageHandler<'d, Driver: NandIoDriver, const MAX_IC_NUM: usize> {
+pub struct NandStorageHandler<
+    'd,
+    Addr: IoAddress,
+    Status: NandStatusReadResult,
+    Driver: NandIoDriver<Addr, Status>,
+    const MAX_IC_NUM: usize,
+> {
     /// NAND IO Commander
-    commander: NandCommander<'d, Driver, MAX_IC_NUM>,
+    commander: NandCommander<'d, Addr, Status, Driver, MAX_IC_NUM>,
     // TODO: Add NAND Map
     // TODO: Add NAND Block Assignment
     // TODO: Channel for NAND Controller, ...
 }
 
-impl<'d, Driver: NandIoDriver, const MAX_IC_NUM: usize> NandStorageHandler<'d, Driver, MAX_IC_NUM> {
+impl<
+        'd,
+        Addr: IoAddress,
+        Status: NandStatusReadResult,
+        Driver: NandIoDriver<Addr, Status>,
+        const MAX_IC_NUM: usize,
+    > NandStorageHandler<'d, Addr, Status, Driver, MAX_IC_NUM>
+{
     /// Create a new NandStorageHandler
     pub fn new(driver: &'d mut Driver) -> Self {
         Self {
@@ -158,11 +173,14 @@ impl<'d, Driver: NandIoDriver, const MAX_IC_NUM: usize> NandStorageHandler<'d, D
 
 impl<
         'd,
-        Driver: NandIoDriver,
+        Addr: IoAddress,
+        Status: NandStatusReadResult,
+        Driver: NandIoDriver<Addr, Status>,
         const MAX_IC_NUM: usize,
         ReqTag: Eq + PartialEq,
         const LOGICAL_BLOCK_SIZE: usize,
-    > StorageHandler<ReqTag, LOGICAL_BLOCK_SIZE> for NandStorageHandler<'d, Driver, MAX_IC_NUM>
+    > StorageHandler<ReqTag, LOGICAL_BLOCK_SIZE>
+    for NandStorageHandler<'d, Addr, Status, Driver, MAX_IC_NUM>
 {
     /// Request handler
     async fn request(
@@ -189,7 +207,6 @@ impl<
             StorageMsgId::Read => {
                 // Read
                 // TODO: NANDからデータを読み出す処理
-
                 StorageResponse::read(request.req_tag, [0; LOGICAL_BLOCK_SIZE])
             }
             StorageMsgId::Write => {

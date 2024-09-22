@@ -1,8 +1,8 @@
-use broccoli_core::nand::commander::NandCommander;
 use embassy_futures::join::join;
 use embassy_rp::gpio::{Level, Output};
 
-use crate::nand::fw_driver::NandIoFwDriver;
+use crate::nand::fw_driver::{NandIoFwDriver, NandStatusReadBitFlags};
+use crate::nand::nand_address::NandAddress;
 use crate::nand::nand_pins::NandIoPins;
 // Import the macro from the appropriate module
 
@@ -11,9 +11,10 @@ use crate::shared::{
     datatype::StorageHandleDispatcher,
     resouce::{CHANNEL_STORAGE_RESPONSE_TO_USB_BULK, CHANNEL_USB_BULK_TO_STORAGE_REQUEST},
 };
-use broccoli_core::storage::{
-    handler::NandStorageHandler, handler_ramdisk::RamDiskHandler, protocol::StorageHandler,
-};
+use broccoli_core::commander::NandCommander;
+use broccoli_core::common::storage_req::StorageHandler;
+use broccoli_core::ramdisk_handler::RamDiskHandler;
+use broccoli_core::storage_handler::NandStorageHandler;
 
 /// RAM Disk Debug Enable
 async fn ram_dispatch_task() {
@@ -34,8 +35,12 @@ async fn core_dispatch_task(nandio_pins: NandIoPins<'static>) {
     let mut fw_driver = NandIoFwDriver::new(nandio_pins);
 
     // Request Handler
-    let mut storage: NandStorageHandler<NandIoFwDriver, NAND_MAX_IC_NUM> =
-        NandStorageHandler::new(&mut fw_driver);
+    let mut storage: NandStorageHandler<
+        NandAddress,
+        NandStatusReadBitFlags,
+        NandIoFwDriver,
+        NAND_MAX_IC_NUM,
+    > = NandStorageHandler::new(&mut fw_driver);
 
     // Channel Msg <---> Request Handler
     let mut dispatcher = StorageHandleDispatcher::new(

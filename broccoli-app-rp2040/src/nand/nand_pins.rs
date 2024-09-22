@@ -1,4 +1,4 @@
-use broccoli_core::nand::io_driver::NandIoError;
+use broccoli_core::common::io_driver::NandIoError;
 use cortex_m::delay;
 use embassy_rp::gpio::{Flex, Input, Output};
 use embassy_rp::gpio::{Level, Pull};
