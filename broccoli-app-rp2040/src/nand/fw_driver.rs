@@ -9,22 +9,27 @@ use broccoli_core::nand::{
 };
 use embassy_time::Timer;
 
-use crate::nand::nand_pins::NandIoPins;
+use crate::{
+    nand::nand_pins::NandIoPins,
+    shared::constant::{
+        DELAY_US_FOR_COMMAND_LATCH, DELAY_US_FOR_RESET, DELAY_US_FOR_WAIT_BUSY_READ,
+        ID_READ_CMD_BYTES, ID_READ_EXPECT_DATA, NAND_MAX_IC_NUM, TIMEOUT_LIMIT_US_FOR_WAIT_BUSY,
+    },
+};
 
 /// NAND IC Command Driver for TC58NVG0S3HTA00 (JISC-SSD)
-pub struct NandIoFwDriver<'d, Driver: NandIoDriver> {
+pub struct NandIoFwDriver<'d> {
     pins: NandIoPins<'d>,
-    commander: NandCommander<'d, Driver, MAX_IC_NUM>,
 }
 
-impl<'pin> NandIoFwDriver<'pin> {
+impl<'d> NandIoFwDriver<'d> {
     /// Create a new NandIoFwDriver
-    pub fn new(pins: NandIoPins<'pin>) -> Self {
+    pub fn new(pins: NandIoPins<'d>) -> Self {
         Self { pins }
     }
 }
 
-impl<'pin> NandIoDriver for NandIoFwDriver<'pin> {
+impl<'d> NandIoDriver for NandIoFwDriver<'d> {
     async fn setup(&mut self) {
         self.pins.setup().await;
     }
@@ -94,11 +99,11 @@ impl<'pin> NandIoDriver for NandIoFwDriver<'pin> {
     }
 
     /// Read NAND IC data
-    async fn read_data<'d>(
+    async fn read_data<'data>(
         &mut self,
         cs_index: usize,
         address: NandAddress,
-        read_data_ref: &'d mut [u8],
+        read_data_ref: &'data mut [u8],
         read_bytes: usize,
     ) -> Result<(), NandIoError> {
         self.pins.assert_cs(cs_index).await;

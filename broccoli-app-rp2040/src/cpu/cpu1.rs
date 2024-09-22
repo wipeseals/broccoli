@@ -5,7 +5,6 @@ use embassy_rp::gpio::{Level, Output};
 use crate::nand::fw_driver::NandIoFwDriver;
 use crate::nand::nand_pins::NandIoPins;
 // Import the macro from the appropriate module
-use crate::nand::{init_nandio_pins, NandIoPins};
 
 use crate::shared::{
     constant::*,
@@ -31,12 +30,14 @@ async fn ram_dispatch_task() {
 
 /// Core Storage Handler Task
 async fn core_dispatch_task(nandio_pins: NandIoPins<'static>) {
-    let fw_driver = NandIoFwDriver::new(nandio_pins);
+    // Physical Command Driver
+    let mut fw_driver = NandIoFwDriver::new(nandio_pins);
 
-    let mut storage = NandStorageHandler::new(&mut fw_driver);
+    // Request Handler
+    let mut storage: NandStorageHandler<NandIoFwDriver, NAND_MAX_IC_NUM> =
+        NandStorageHandler::new(&mut fw_driver);
 
-    // TODO: Implement NAND Flash Communication
-
+    // Channel Msg <---> Request Handler
     let mut dispatcher = StorageHandleDispatcher::new(
         storage,
         CHANNEL_USB_BULK_TO_STORAGE_REQUEST.dyn_receiver(),

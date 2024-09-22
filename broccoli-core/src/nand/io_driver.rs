@@ -97,11 +97,11 @@ pub trait NandIoDriver {
     /// Read NAND IC status
     async fn read_status(&mut self, cs_index: usize) -> NandStatusOutput;
     /// Read NAND IC data
-    async fn read_data<'d>(
+    async fn read_data<'data>(
         &mut self,
         cs_index: usize,
         address: NandAddress,
-        read_data_ref: &'d mut [u8],
+        read_data_ref: &'data mut [u8],
         read_bytes: usize,
     ) -> Result<(), NandIoError>;
     /// Erase NAND IC block
