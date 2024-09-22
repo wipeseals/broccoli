@@ -1,38 +1,5 @@
 use bitfield::bitfield;
 
-/// Usable NAND Page Size
-pub const DATA_BYTES_PER_PAGE: usize = 2048;
-/// Metadata on NAND Page
-pub const SPARE_BYTES_PER_PAGE: usize = 128;
-/// Page/Block
-pub const PAGES_PER_BLOCK: usize = 64;
-/// Total Blocks per IC
-pub const MAX_BLOCKS_PER_IC: usize = 1024;
-/// Minimum Blocks per IC
-pub const MIN_BLOCKS_PER_IC: usize = 1004;
-/// minimum number of IC
-pub const MIN_IC: usize = 1;
-/// Maximum number of IC
-pub const MAX_IC: usize = 2;
-
-/// IC Bitmap Size
-pub const IC_BITMAP_U32_SIZE: usize = (MAX_IC / 32) + 1;
-/// Block Bitmap Size
-pub const BLOCK_BITMAP_U32_SIZE: usize = (MAX_BLOCKS_PER_IC / 32) + 1;
-
-/// Total NAND Page Size (Data + Spare = 2176 bytes)
-pub const TOTAL_BYTES_PER_PAGE: usize = DATA_BYTES_PER_PAGE + SPARE_BYTES_PER_PAGE;
-/// Total Bytes per Block (2176 * 64 = 139264 bytes)
-pub const BYTES_PER_BLOCK: usize = TOTAL_BYTES_PER_PAGE * PAGES_PER_BLOCK;
-/// Maximum Pages per IC (64 * 1024 = 65536 pages)
-pub const MAX_PAGES_PER_IC: usize = MAX_BLOCKS_PER_IC * PAGES_PER_BLOCK;
-/// Maximum Bytes per IC (139264 * 1024 = 142606336 bytes = 142.6MB)
-pub const MAX_BYTES_PER_IC: usize = MAX_BLOCKS_PER_IC * BYTES_PER_BLOCK;
-/// Minimum Pages per IC (64 * 1004 = 64256 pages)
-pub const MIN_PAGS_PER_IC: usize = MIN_BLOCKS_PER_IC * PAGES_PER_BLOCK;
-/// Minimum Bytes per IC (139264 * 1004 = 140000256 bytes = 140MB)
-pub const MIN_BYTES_PER_IC: usize = MIN_BLOCKS_PER_IC * BYTES_PER_BLOCK;
-
 /// Address for NAND
 ///
 /// Read/Write
