@@ -26,11 +26,11 @@ impl<'d, Driver: NandIoDriver, const MAX_IC_NUM: usize> NandCommander<'d, Driver
     /// Return number of valid NAND chip
     /// If no NAND chip is found, return error
     pub async fn setup(&mut self) -> Result<usize, NandIoError> {
-        self.driver.setup();
+        self.driver.setup().await;
         self.num_cs = 0;
 
         for i in 0..MAX_IC_NUM {
-            self.driver.reset(i);
+            self.driver.reset(i).await;
             if !self.driver.read_id(i).await {
                 break;
             }

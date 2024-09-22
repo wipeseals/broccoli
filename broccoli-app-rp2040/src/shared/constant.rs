@@ -84,7 +84,7 @@ pub const TIMEOUT_LIMIT_US_FOR_WAIT_BUSY: u64 = 1_000_000;
 /* Debug Setup */
 
 /// Enable RAM Disk for debug
-pub const DEBUG_ENABLE_RAM_DISK: bool = true;
+pub const DEBUG_ENABLE_RAM_DISK: bool = false;
 /// USB device number of blocks (for debug)
 pub const DEBUG_RAM_DISK_NUM_BLOCKS: usize = 16;
 /// USB device total size (for debug)

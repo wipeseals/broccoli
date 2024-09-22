@@ -85,7 +85,7 @@ impl<'d> NandIoDriver for NandIoFwDriver<'d> {
     async fn read_status(&mut self, cs_index: usize) -> NandStatusOutput {
         let mut status = [0x00];
 
-        self.pins.assert_cs(cs_index);
+        self.pins.assert_cs(cs_index).await;
         self.pins
             .input_command(NandCommandId::StatusRead as u8, DELAY_US_FOR_COMMAND_LATCH)
             .await;

@@ -72,13 +72,13 @@ impl<'p> NandIoPins<'p> {
     /// Init NAND I/O Pins
     pub async fn setup(&mut self) {
         // bidirectional. default: output, low
-        self.set_data_dir(true);
-        self.set_data(0x00);
+        self.set_data_dir(true).await;
+        self.set_data(0x00).await;
 
         // output
-        self.deassert_cs();
-        self.set_func_pins(false, false, false, false);
-        self.set_write_protect(false);
+        self.deassert_cs().await;
+        self.set_func_pins(false, false, false, false).await;
+        self.set_write_protect(false).await;
 
         crate::trace!("Init All pins");
     }
@@ -241,7 +241,7 @@ impl<'p> NandIoPins<'p> {
 
     /// Clear Function Pins
     pub async fn reset_func_pins(&mut self) {
-        self.set_func_pins(false, false, false, false);
+        self.set_func_pins(false, false, false, false).await;
     }
 
     /// Command Input
@@ -251,13 +251,13 @@ impl<'p> NandIoPins<'p> {
         // CLE=H, ALE=L, /WE=L->H, /RE=H
 
         // set
-        self.set_data_dir(true);
-        self.set_data(command);
-        self.set_func_pins(true, false, false, false);
+        self.set_data_dir(true).await;
+        self.set_data(command).await;
+        self.set_func_pins(true, false, false, false).await;
         Timer::after_micros(delay_us).await;
 
         // latch
-        self.set_func_pins(true, false, true, false);
+        self.set_func_pins(true, false, true, false).await;
         Timer::after_micros(delay_us).await;
 
         crate::trace!("Command Input[{}]: 0x{:02X}", 0, command);
@@ -271,13 +271,13 @@ impl<'p> NandIoPins<'p> {
             // CLE=L, ALE=H, /WE=L->H, /RE=H
 
             // set
-            self.set_data_dir(true);
-            self.set_data(*address);
-            self.set_func_pins(false, true, false, false);
+            self.set_data_dir(true).await;
+            self.set_data(*address).await;
+            self.set_func_pins(false, true, false, false).await;
             Timer::after_micros(delay_us).await;
 
             // latch
-            self.set_func_pins(false, true, true, false);
+            self.set_func_pins(false, true, true, false).await;
             Timer::after_micros(delay_us).await;
 
             crate::trace!("Address Input[{}]: 0x{:02X}", index, *address);
@@ -293,13 +293,13 @@ impl<'p> NandIoPins<'p> {
             // CLE=L, ALE=L, /WE=L->H, /RE=H
 
             // set
-            self.set_data_dir(true);
-            self.set_data(*data);
-            self.set_func_pins(false, false, false, false);
+            self.set_data_dir(true).await;
+            self.set_data(*data).await;
+            self.set_func_pins(false, false, false, false).await;
             Timer::after_micros(delay_us).await;
 
             // latch
-            self.set_func_pins(false, false, true, false);
+            self.set_func_pins(false, false, true, false).await;
             Timer::after_micros(delay_us).await;
 
             crate::trace!("Data Input[{}]: 0x{:02X}", index, *data);
@@ -324,15 +324,15 @@ impl<'p> NandIoPins<'p> {
             // data output from ic
             // CLE=L, ALE=L, /WE=L, /RE=H->L
 
-            self.set_data_dir(false);
-            self.set_func_pins(false, false, false, true);
+            self.set_data_dir(false).await;
+            self.set_func_pins(false, false, false, true).await;
             Timer::after_micros(delay_us).await;
 
             // capture & parse data bits
             *data = self.get_data().await;
 
             // RE
-            self.set_func_pins(false, false, false, false);
+            self.set_func_pins(false, false, false, false).await;
             Timer::after_micros(delay_us).await;
 
             crate::trace!("Data Output[{}]: 0x{:02X}", index, *data);
