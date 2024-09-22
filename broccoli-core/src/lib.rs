@@ -4,4 +4,3 @@
 
 pub mod nand;
 pub mod storage;
-pub mod util;

@@ -1,4 +1,3 @@
-use crate::util::bitarr::BitArr;
 use bitfield::bitfield;
 
 /// Usable NAND Page Size
@@ -20,13 +19,6 @@ pub const MAX_IC: usize = 2;
 pub const IC_BITMAP_U32_SIZE: usize = (MAX_IC / 32) + 1;
 /// Block Bitmap Size
 pub const BLOCK_BITMAP_U32_SIZE: usize = (MAX_BLOCKS_PER_IC / 32) + 1;
-
-/// IC Bitmap
-pub type IcBitmapArr = BitArr<IC_BITMAP_U32_SIZE>;
-/// Block Bitmap
-pub type NandBlockBitArr = BitArr<BLOCK_BITMAP_U32_SIZE>;
-/// All IC Block Bitmap
-pub type AllIcNandBlockBitArr = [NandBlockBitArr; MAX_IC];
 
 /// Total NAND Page Size (Data + Spare = 2176 bytes)
 pub const TOTAL_BYTES_PER_PAGE: usize = DATA_BYTES_PER_PAGE + SPARE_BYTES_PER_PAGE;
