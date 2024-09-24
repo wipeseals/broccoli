@@ -41,9 +41,9 @@ pub const USB_PRODUCT_DEVICE_VERSION: [u8; 4] = *b"0001";
 /* NAND Setup */
 
 /// NAND IC count (min)
-pub const NAND_MIX_IC_NUM: usize = 1;
+pub const NAND_MIX_CHIP_NUM: usize = 1;
 /// NAND IC count
-pub const NAND_MAX_IC_NUM: usize = 2;
+pub const NAND_MAX_CHIP_NUM: usize = 2;
 /// NAND page size write requester visible
 pub const NAND_PAGE_SIZE_USABLE: usize = 2048;
 /// NAND page size metadata
@@ -52,22 +52,22 @@ pub const NAND_PAGE_SIZE_SPARE: usize = 128;
 pub const NAND_PAGE_TOTAL_SIZE: usize = NAND_PAGE_SIZE_USABLE + NAND_PAGE_SIZE_SPARE;
 
 /// Page/Block
-pub const PAGES_PER_PHYSICAL_BLOCK: usize = 64;
+pub const PAGES_PER_NAND_BLOCK: usize = 64;
 /// Total Blocks per IC
-pub const MAX_PHYSICAL_BLOCKS_PER_IC: usize = 1024;
+pub const MAX_NAND_BLOCKS_PER_CHIP: usize = 1024;
 /// Minimum Blocks per IC
-pub const MIN_PHYSICAL_BLOCKS_PER_IC: usize = 1004;
+pub const MIN_NAND_BLOCKS_PER_CHIP: usize = 1004;
 
 /// Total Bytes per Block (2176 * 64 = 139264 bytes)
-pub const NAND_BYTES_PER_PHYSICAL_BLOCK: usize = NAND_PAGE_TOTAL_SIZE * PAGES_PER_PHYSICAL_BLOCK;
+pub const BYTES_PER_NAND_BLOCK: usize = NAND_PAGE_TOTAL_SIZE * PAGES_PER_NAND_BLOCK;
 /// Maximum Pages per IC (64 * 1024 = 65536 pages)
-pub const NAND_MAX_PAGES_PER_IC: usize = MAX_PHYSICAL_BLOCKS_PER_IC * PAGES_PER_PHYSICAL_BLOCK;
+pub const MAX_PAGES_PER_CHIP: usize = MAX_NAND_BLOCKS_PER_CHIP * PAGES_PER_NAND_BLOCK;
 /// Maximum Bytes per IC (139264 * 1024 = 142606336 bytes = 142.6MB)
-pub const MAX_BYTES_PER_IC: usize = MAX_PHYSICAL_BLOCKS_PER_IC * NAND_BYTES_PER_PHYSICAL_BLOCK;
+pub const MAX_BYTES_PER_CHIP: usize = MAX_NAND_BLOCKS_PER_CHIP * BYTES_PER_NAND_BLOCK;
 /// Minimum Pages per IC (64 * 1004 = 64256 pages)
-pub const MIN_PAGS_PER_IC: usize = MIN_PHYSICAL_BLOCKS_PER_IC * PAGES_PER_PHYSICAL_BLOCK;
+pub const MIN_PAGS_PER_CHIP: usize = MIN_NAND_BLOCKS_PER_CHIP * PAGES_PER_NAND_BLOCK;
 /// Minimum Bytes per IC (139264 * 1004 = 140000256 bytes = 140MB)
-pub const MIN_BYTES_PER_IC: usize = MIN_PHYSICAL_BLOCKS_PER_IC * NAND_BYTES_PER_PHYSICAL_BLOCK;
+pub const MIN_BYTES_PER_CHIP: usize = MIN_NAND_BLOCKS_PER_CHIP * BYTES_PER_NAND_BLOCK;
 
 /* NAND AC/Function Characteristic */
 

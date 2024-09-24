@@ -67,4 +67,15 @@ impl<
             Ok(self.num_cs)
         }
     }
+
+    /// Check if the block is bad
+    ///
+    /// Bad Block Test Flow (TC58NVG0S3HTA00)
+    /// Regarding invalid blocks, bad block mark is in whole pages. Please read one column of any page in each
+    /// block. If the data of the column is 00 (Hex), define the block as a bad block.
+    pub async fn check_badblock(&mut self, address: Addr) -> Result<bool, NandIoError> {
+        let mut data = [0u8; 1];
+        self.driver.read_data(address, &mut data, 1).await?;
+        Ok(data[0] == 0x00)
+    }
 }

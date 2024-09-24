@@ -35,11 +35,13 @@ async fn core_dispatch_task(nandio_pins: NandIoPins<'static>) {
     let mut fw_driver = NandIoFwDriver::new(nandio_pins);
 
     // Request Handler
+    // 2IC, 1024Blocks/IC扱うことができるNandStorageHandlerを作成
     let mut storage: NandStorageHandler<
         NandAddress,
         NandStatusReadBitFlags,
         NandIoFwDriver,
-        NAND_MAX_IC_NUM,
+        NAND_MAX_CHIP_NUM,
+        MAX_NAND_BLOCKS_PER_CHIP,
     > = NandStorageHandler::new(&mut fw_driver);
 
     // Channel Msg <---> Request Handler
