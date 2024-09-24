@@ -1,8 +1,10 @@
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 
 use broccoli_core::common::storage_req::StorageResponseReport;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 /// SCSI command codes
+#[derive(IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
 pub enum ScsiCommand {
     TestUnitReady = 0x00,
