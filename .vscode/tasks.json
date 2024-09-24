@@ -124,6 +124,21 @@
             }
         },
         {
+            "label": "toml format fix",
+            "type": "shell",
+            "command": "taplo fmt --option reorder_keys=true",
+            "options": {
+                "cwd": "${workspaceFolder}/${input:crate}"
+            },
+            "problemMatcher": {
+                "base": "$rustc",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}/${input:crate}"
+                ]
+            }
+        },
+        {
             "label": "clippy",
             "type": "shell",
             "command": "cargo clippy --all-features -- --deny=warnings",
