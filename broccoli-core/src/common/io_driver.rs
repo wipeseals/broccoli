@@ -46,31 +46,33 @@ pub enum NandIoError {
 #[cfg_attr(test, async_mock)]
 #[cfg_attr(test, async_trait)]
 #[trait_variant::make(Send)]
-pub trait NandIoDriver<Addr: IoAddress, Status: NandStatusReadResult> {
+pub trait NandIoDriver<
+    Addr: IoAddress + Copy + Clone + Eq + PartialEq,
+    Status: NandStatusReadResult,
+>
+{
     /// Initialize all pins
     async fn setup(&mut self);
     /// Set write protect
     async fn set_write_protect(&mut self, enable: bool);
     /// Reset NAND IC
-    async fn reset(&mut self, cs_index: usize);
+    async fn reset(&mut self, address: Addr);
     /// Check NAND IC ID Succeed
-    async fn read_id(&mut self, cs_index: usize) -> bool;
+    async fn read_id(&mut self, address: Addr) -> bool;
     /// Read NAND IC status
-    async fn read_status(&mut self, cs_index: usize) -> Status;
+    async fn read_status(&mut self, address: Addr) -> Status;
     /// Read NAND IC data
     async fn read_data<'data>(
         &mut self,
-        cs_index: usize,
         address: Addr,
         read_data_ref: &'data mut [u8],
         read_bytes: usize,
     ) -> Result<(), NandIoError>;
     /// Erase NAND IC block
-    async fn erase_block(&mut self, cs_index: usize, address: Addr) -> Result<Status, NandIoError>;
+    async fn erase_block(&mut self, address: Addr) -> Result<Status, NandIoError>;
     /// Write NAND IC data
     async fn write_data(
         &mut self,
-        cs_index: usize,
         address: Addr,
         write_data_ref: &[u8],
         write_bytes: usize,

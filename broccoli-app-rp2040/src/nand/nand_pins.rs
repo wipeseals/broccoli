@@ -155,7 +155,7 @@ impl<'p> NandIoPins<'p> {
 
     /// set CS
     /// cs_index: chip select index
-    pub async fn assert_cs(&mut self, cs_index: usize) {
+    pub async fn assert_cs(&mut self, cs_index: u32) {
         match cs_index {
             0 => {
                 self.ceb0.set_state(PinState::Low).unwrap();

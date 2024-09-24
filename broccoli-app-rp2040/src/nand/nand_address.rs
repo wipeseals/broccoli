@@ -1,7 +1,7 @@
+use crate::shared::constant::NAND_TOTAL_ADDR_TRANSFER_BYTES;
+use bitfield::bitfield;
 use broccoli_core::common::io_address::IoAddress;
 use byteorder::{ByteOrder, LittleEndian};
-
-use crate::shared::constant::NAND_TOTAL_ADDR_TRANSFER_BYTES;
 
 /// Chip Column Address.
 ///
@@ -22,10 +22,19 @@ use crate::shared::constant::NAND_TOTAL_ADDR_TRANSFER_BYTES;
 /// CAx: Column Address
 /// PAx: Page Address
 ///   PA15~PA6: Block Address
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub struct NandAddress {
-    column: u16,
-    page: u16,
+bitfield! {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+    /// Chip Column Address.
+    pub struct NandAddress(u32);
+    /// column address: 12+2bit 0 ~ 2176: 12bit (~ 16383: 14bit. reserved)
+    pub column, set_column: 11,0;
+    /// chip_id: 2bit 0 ~ 3 (実際には0,1しか使わない)
+    /// reservedを間借りしており、Addressingの生の値にするときは除外する必要あり
+    pub chip, set_chip: 15,12;
+    /// page address: 6bit 0 ~ 63
+    pub page, set_page: 21,16;
+    /// block address: 10bit 0 ~ 1023
+    pub block, set_block: 31,22;
 }
 
 impl NandAddress {
@@ -36,42 +45,37 @@ impl NandAddress {
 
     /// get raw address
     pub fn raw(&self) -> u32 {
-        ((self.page as u32) << 16) | (self.column as u32)
-    }
-
-    /// Set Column Address
-    pub fn set_column(&mut self, column: u16) {
-        self.column = column;
-    }
-
-    /// Set Page Address
-    pub fn set_page(&mut self, page: u16) {
-        self.page = page;
-    }
-
-    /// Set Block Address
-    pub fn set_block(&mut self, block: u32) {
-        self.page = (block << 6) as u16;
+        self.0
     }
 }
 
 impl IoAddress for NandAddress {
     fn column(&self) -> u32 {
-        self.column as u32
+        self.column() as u32
     }
 
     fn page(&self) -> u32 {
-        self.page as u32
+        self.page() as u32
     }
 
     fn block(&self) -> u32 {
-        (self.page >> 6) as u32
+        self.block() as u32
     }
 
-    /// address from block
-    fn from_block(block: u32) -> Self {
+    fn chip(&self) -> u32 {
+        self.chip() as u32
+    }
+
+    fn from_block(chip: u32, block: u32) -> Self {
         let mut addr = NandAddress::default();
+        addr.set_chip(chip);
         addr.set_block(block);
+        addr
+    }
+
+    fn from_chip(chip: u32) -> Self {
+        let mut addr = NandAddress::default();
+        addr.set_chip(chip);
         addr
     }
 
@@ -87,7 +91,9 @@ impl IoAddress for NandAddress {
     }
 
     fn to_block_slice<'d>(&self, data_buf: &'d mut [u8]) {
-        let data = self.block();
+        // Auto block Eraseで使用するアドレス。PA7~PA0, PA15~PA8のみを使用する
+        // rawの値から後方16bitを取り出す
+        let data = self.raw() >> 16;
         LittleEndian::write_u16(data_buf, data as u16);
     }
 }

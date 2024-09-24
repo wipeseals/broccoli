@@ -86,7 +86,8 @@ impl<'d> NandIoDriver<NandAddress, NandStatusReadBitFlags> for NandIoFwDriver<'d
         self.pins.set_write_protect(enable).await;
     }
 
-    async fn reset(&mut self, cs_index: usize) {
+    async fn reset(&mut self, address: NandAddress) {
+        let cs_index = address.chip();
         self.pins.assert_cs(cs_index).await;
         self.pins
             .input_command(NandCommandId::Reset as u8, DELAY_US_FOR_COMMAND_LATCH)
@@ -97,7 +98,8 @@ impl<'d> NandIoDriver<NandAddress, NandStatusReadBitFlags> for NandIoFwDriver<'d
     }
 
     /// Read NAND IC ID
-    async fn read_id(&mut self, cs_index: usize) -> bool {
+    async fn read_id(&mut self, address: NandAddress) -> bool {
+        let cs_index = address.chip();
         let mut id_read_results = [0x00u8; 5];
 
         self.pins.assert_cs(cs_index).await;
@@ -130,7 +132,8 @@ impl<'d> NandIoDriver<NandAddress, NandStatusReadBitFlags> for NandIoFwDriver<'d
     }
 
     /// Read NAND IC status
-    async fn read_status(&mut self, cs_index: usize) -> NandStatusReadBitFlags {
+    async fn read_status(&mut self, address: NandAddress) -> NandStatusReadBitFlags {
+        let cs_index = address.chip();
         let mut status = [0x00];
 
         self.pins.assert_cs(cs_index).await;
@@ -149,11 +152,11 @@ impl<'d> NandIoDriver<NandAddress, NandStatusReadBitFlags> for NandIoFwDriver<'d
     /// Read NAND IC data
     async fn read_data<'data>(
         &mut self,
-        cs_index: usize,
         address: NandAddress,
         read_data_ref: &'data mut [u8],
         read_bytes: usize,
     ) -> Result<(), NandIoError> {
+        let cs_index = address.chip();
         let mut address_data = [0x00u8; NAND_TOTAL_ADDR_TRANSFER_BYTES];
         address.to_slice(&mut address_data);
 
@@ -195,9 +198,9 @@ impl<'d> NandIoDriver<NandAddress, NandStatusReadBitFlags> for NandIoFwDriver<'d
 
     async fn erase_block(
         &mut self,
-        cs_index: usize,
         address: NandAddress,
     ) -> Result<NandStatusReadBitFlags, NandIoError> {
+        let cs_index = address.chip();
         let mut block_address_data = [0x00u8; NAND_PAGE_TRANSFER_BYTES];
         address.to_block_slice(&mut block_address_data);
 
@@ -256,11 +259,11 @@ impl<'d> NandIoDriver<NandAddress, NandStatusReadBitFlags> for NandIoFwDriver<'d
 
     async fn write_data(
         &mut self,
-        cs_index: usize,
         address: NandAddress,
         write_data_ref: &[u8],
         write_bytes: usize,
     ) -> Result<NandStatusReadBitFlags, NandIoError> {
+        let cs_index = address.chip();
         let mut address_data = [0x00u8; NAND_TOTAL_ADDR_TRANSFER_BYTES];
         address.to_slice(&mut address_data);
 

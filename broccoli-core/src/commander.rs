@@ -9,7 +9,7 @@ use async_trait::async_trait;
 
 pub struct NandCommander<
     'd,
-    Addr: IoAddress,
+    Addr: IoAddress + Copy + Clone + Eq + PartialEq,
     Status: NandStatusReadResult,
     Driver: NandIoDriver<Addr, Status>,
     const MAX_IC_NUM: usize,
@@ -30,7 +30,7 @@ pub struct NandCommander<
 
 impl<
         'd,
-        Addr: IoAddress,
+        Addr: IoAddress + Copy + Clone + Eq + PartialEq,
         Status: NandStatusReadResult,
         Driver: NandIoDriver<Addr, Status>,
         const MAX_IC_NUM: usize,
@@ -53,8 +53,9 @@ impl<
         self.num_cs = 0;
 
         for i in 0..MAX_IC_NUM {
-            self.driver.reset(i).await;
-            if !self.driver.read_id(i).await {
+            let chip_index = Addr::from_chip(i as u32);
+            self.driver.reset(chip_index).await;
+            if !self.driver.read_id(chip_index).await {
                 break;
             }
             self.num_cs += 1;

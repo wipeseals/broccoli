@@ -143,7 +143,7 @@ impl<
 /// Logical Block Size <= Nand Page Size
 pub struct NandStorageHandler<
     'd,
-    Addr: IoAddress,
+    Addr: IoAddress + Copy + Clone + Eq + PartialEq,
     Status: NandStatusReadResult,
     Driver: NandIoDriver<Addr, Status>,
     const MAX_IC_NUM: usize,
@@ -157,7 +157,7 @@ pub struct NandStorageHandler<
 
 impl<
         'd,
-        Addr: IoAddress,
+        Addr: IoAddress + Copy + Clone + Eq + PartialEq,
         Status: NandStatusReadResult,
         Driver: NandIoDriver<Addr, Status>,
         const MAX_IC_NUM: usize,
@@ -173,7 +173,7 @@ impl<
 
 impl<
         'd,
-        Addr: IoAddress,
+        Addr: IoAddress + Copy + Clone + Eq + PartialEq,
         Status: NandStatusReadResult,
         Driver: NandIoDriver<Addr, Status>,
         const MAX_IC_NUM: usize,
