@@ -19,6 +19,12 @@ pub enum CacheDataType {
     MapData,
 }
 
+impl Default for CacheDataType {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CacheDataType {
     /// Create a new CacheDataType
     pub const fn new() -> Self {
@@ -52,6 +58,12 @@ pub enum CacheStatus<Error: Copy + Clone + Eq + PartialEq> {
     WriteComplete { error: Error },
 }
 
+impl<Error: Copy + Clone + Eq + PartialEq> Default for CacheStatus<Error> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<Error: Copy + Clone + Eq + PartialEq> CacheStatus<Error> {
     /// Create a new CacheStatus
     pub const fn new() -> Self {
@@ -61,34 +73,28 @@ impl<Error: Copy + Clone + Eq + PartialEq> CacheStatus<Error> {
     /// Check if the buffer is reusable
     /// 初期状態、読み込み完了、書き込み完了の場合は再利用可能
     pub fn is_reusable(&self) -> bool {
-        match self {
-            Self::Initial => true,
-            Self::ReadComplete { error: _ } => true,
-            Self::WriteComplete { error: _ } => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Self::Initial | Self::ReadComplete { .. } | Self::WriteComplete { .. }
+        )
     }
 
     /// Check if the buffer is valid
     /// 読み込み完了、データ変更、書き込み完了の場合はデータが有効
     pub fn is_data_unchanged(&self) -> bool {
-        match self {
-            Self::ReadComplete { error: _ } => true,
-            Self::Changed => true,
-            Self::WriteComplete { error: _ } => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Self::ReadComplete { .. } | Self::Changed | Self::WriteComplete { .. }
+        )
     }
 
     /// Check if the buffer is clean
     /// 初期状態、読み込み完了、書き込み完了の場合はデータがRAM上で変更されている
     pub fn is_data_changed(&self) -> bool {
-        match self {
-            Self::Changed => true,
-            Self::EncodingBeforeWrite => true,
-            Self::Writing => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Self::Changed | Self::EncodingBeforeWrite | Self::Writing
+        )
     }
 }
 
@@ -117,6 +123,18 @@ pub struct CacheBuffer<
 
     /// Buffer Data
     pub data: [u8; LOGICAL_BLOCK_SIZE],
+}
+
+impl<
+        LogicalAddr: Copy + Clone + Eq + PartialEq,
+        NandAddr: Copy + Clone + Eq + PartialEq,
+        Error: Copy + Clone + Eq + PartialEq,
+        const LOGICAL_BLOCK_SIZE: usize,
+    > Default for CacheBuffer<LogicalAddr, NandAddr, Error, LOGICAL_BLOCK_SIZE>
+{
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<

@@ -12,7 +12,6 @@ use embedded_hal_1::digital::PinState;
 pub struct NandIoPins<'d> {
     /// I/O Pins
     io0: Flex<'d>,
-
     io1: Flex<'d>,
     io2: Flex<'d>,
     io3: Flex<'d>,
@@ -31,6 +30,7 @@ pub struct NandIoPins<'d> {
 }
 
 impl<'p> NandIoPins<'p> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         io0: Flex<'p>,
         io1: Flex<'p>,

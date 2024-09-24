@@ -51,19 +51,19 @@ impl NandAddress {
 
 impl IoAddress for NandAddress {
     fn column(&self) -> u32 {
-        self.column() as u32
+        self.column()
     }
 
     fn page(&self) -> u32 {
-        self.page() as u32
+        self.page()
     }
 
     fn block(&self) -> u32 {
-        self.block() as u32
+        self.block()
     }
 
     fn chip(&self) -> u32 {
-        self.chip() as u32
+        self.chip()
     }
 
     fn from_block(chip: u32, block: u32) -> Self {
@@ -80,7 +80,7 @@ impl IoAddress for NandAddress {
     }
 
     /// Pack Address into slice.
-    fn to_slice<'d>(&self, data_buf: &'d mut [u8]) {
+    fn to_slice(&self, data_buf: &mut [u8]) {
         crate::assert!(
             data_buf.len() == NAND_TOTAL_ADDR_TRANSFER_BYTES,
             "Invalid data_buf length"
@@ -90,7 +90,7 @@ impl IoAddress for NandAddress {
         LittleEndian::write_u32(data_buf, data);
     }
 
-    fn to_block_slice<'d>(&self, data_buf: &'d mut [u8]) {
+    fn to_block_slice(&self, data_buf: &mut [u8]) {
         // Auto block Eraseで使用するアドレス。PA7~PA0, PA15~PA8のみを使用する
         // rawの値から後方16bitを取り出す
         let data = self.raw() >> 16;

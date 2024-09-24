@@ -43,8 +43,6 @@ pub enum NandIoError {
     IdReadFailed,
 }
 
-#[cfg_attr(test, async_mock)]
-#[cfg_attr(test, async_trait)]
 #[trait_variant::make(Send)]
 pub trait NandIoDriver<
     Addr: IoAddress + Copy + Clone + Eq + PartialEq,

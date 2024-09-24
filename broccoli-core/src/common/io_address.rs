@@ -20,8 +20,8 @@ pub trait IoAddress {
     fn from_chip(chip: u32) -> Self;
 
     /// Get the raw address
-    fn to_slice<'d>(&self, data_buf: &'d mut [u8]);
+    fn to_slice(&self, data_buf: &mut [u8]);
 
     /// Create an address from the block number
-    fn to_block_slice<'d>(&self, data_buf: &'d mut [u8]);
+    fn to_block_slice(&self, data_buf: &mut [u8]);
 }
