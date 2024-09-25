@@ -44,7 +44,7 @@ fn create_usb_config<'a>() -> Config<'a> {
 }
 
 /// USB Control Transfer and Bulk Transfer Channel
-pub async fn handle_usb_transport(usb_driver: Driver<'static, USB>) {
+pub async fn handle_usb_transport(driver: Driver<'static, USB>) {
     // wait for StorageHandler to be ready
     crate::info!("Send StorageRequest(Seup) to StorageHandler");
     let num_blocks = setup_storage_request_response_channel(MscReqTag::new(0xaa995566, 0)).await;
@@ -61,7 +61,7 @@ pub async fn handle_usb_transport(usb_driver: Driver<'static, USB>) {
 
     let mut ctrl_handler = MscCtrlHandler::new(CHANNEL_USB_CTRL_TO_USB_BULK.dyn_sender());
     let mut builder = Builder::new(
-        usb_driver,
+        driver,
         config,
         &mut config_descriptor,
         &mut bos_descriptor,

@@ -1,12 +1,17 @@
 use embassy_rp::gpio::Output;
-use embassy_time::Timer;
+
+use crate::nand::nand_pins::NandIoPins;
+use crate::task::{ramdisk_task, storage_task};
 
 use crate::share::constant::*;
 
 #[embassy_executor::task]
-pub async fn main_task(led: Output<'static>) {
-    loop {
-        // NOP
-        Timer::after_micros(1000).await;
+pub async fn main_task(nandio_pins: NandIoPins<'static>, led: Output<'static>) {
+    if DEBUG_ENABLE_RAM_DISK {
+        crate::info!("RAM Disk Enabled");
+        ramdisk_task::handle_ram_storage().await;
+    } else {
+        crate::info!("RAM Disk Disabled");
+        storage_task::handle_storage_task(nandio_pins).await;
     }
 }

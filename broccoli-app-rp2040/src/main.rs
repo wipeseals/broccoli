@@ -63,11 +63,11 @@ async fn main(_spawner: Spawner) {
         unsafe { &mut *core::ptr::addr_of_mut!(CORE1_STACK) },
         move || {
             let executor1 = EXECUTOR1.init(Executor::new());
-            executor1.run(|spawner| unwrap!(spawner.spawn(cpu1::main_task(led))));
+            executor1.run(|spawner| unwrap!(spawner.spawn(cpu1::main_task(nandio_pins, led))));
         },
     );
 
-    let usb_driver = Driver::new(p.USB, Irqs);
+    let driver = Driver::new(p.USB, Irqs);
     let executor0 = EXECUTOR0.init(Executor::new());
-    executor0.run(|spawner| unwrap!(spawner.spawn(cpu0::main_task(usb_driver, nandio_pins))));
+    executor0.run(|spawner| unwrap!(spawner.spawn(cpu0::main_task(driver))));
 }
