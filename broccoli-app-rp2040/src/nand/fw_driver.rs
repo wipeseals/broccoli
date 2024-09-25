@@ -1,8 +1,8 @@
 use crate::nand::nand_address::NandAddress;
-use crate::shared::constant::{NAND_PAGE_TRANSFER_BYTES, NAND_TOTAL_ADDR_TRANSFER_BYTES};
+use crate::share::constant::{NAND_PAGE_TRANSFER_BYTES, NAND_TOTAL_ADDR_TRANSFER_BYTES};
 use crate::{
     nand::nand_pins::NandIoPins,
-    shared::constant::{
+    share::constant::{
         DELAY_US_FOR_COMMAND_LATCH, DELAY_US_FOR_RESET, DELAY_US_FOR_WAIT_BUSY_READ,
         ID_READ_CMD_BYTES, ID_READ_EXPECT_DATA, NAND_MAX_CHIP_NUM, TIMEOUT_LIMIT_US_FOR_WAIT_BUSY,
     },

@@ -3,15 +3,13 @@
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
 
-mod cpu;
+mod cpu0;
+mod cpu1;
 mod nand;
-mod shared;
+mod share;
+mod task;
 mod usb;
 
-use core::default::Default;
-use core::marker::Sized;
-
-use cpu::{cpu0, cpu1};
 use defmt::*;
 use embassy_executor::{Executor, Spawner};
 use embassy_rp::bind_interrupts;
@@ -20,7 +18,7 @@ use embassy_rp::multicore::{spawn_core1, Stack};
 use embassy_rp::peripherals::USB;
 use embassy_rp::usb::{Driver, InterruptHandler};
 use nand::nand_pins::NandIoPins;
-use shared::constant::CORE1_TASK_STACK_SIZE;
+use share::constant::CORE1_TASK_STACK_SIZE;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 

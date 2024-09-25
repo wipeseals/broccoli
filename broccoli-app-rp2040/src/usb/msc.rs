@@ -32,8 +32,8 @@ use embassy_usb::{Builder, Config, Handler};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use static_cell::StaticCell;
 
-use crate::shared::constant::*;
-use crate::shared::datatype::MscReqTag;
+use crate::share::constant::*;
+use crate::share::datatype::MscReqTag;
 use crate::usb::scsi::*;
 use broccoli_core::common::storage_req::{StorageMsgId, StorageRequest, StorageResponse};
 
