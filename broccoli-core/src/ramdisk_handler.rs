@@ -37,7 +37,7 @@ impl<const LOGICAL_BLOCK_SIZE: usize, const TOTAL_DATA_SIZE: usize>
     }
 
     /// Set FAT12 Data to RAM Disk
-    /// refs. https://github.com/hathach/tinyusb/blob/master/examples/device/cdc_msc/src/msc_disk.c#L52
+    /// refs. <https://github.com/hathach/tinyusb/blob/master/examples/device/cdc_msc/src/msc_disk.c#L52>
     #[cfg(feature = "ramdisk_sample_data")]
     #[rustfmt::skip]
     pub fn set_fat12_sample_data(&mut self) {
