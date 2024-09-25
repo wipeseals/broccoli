@@ -29,12 +29,13 @@ use embassy_usb::driver::{Driver, Endpoint, EndpointError, EndpointIn, EndpointO
 use embassy_usb::msos::{self, windows_version};
 use embassy_usb::types::InterfaceNumber;
 use embassy_usb::{Builder, Config, Handler};
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 use static_cell::StaticCell;
 
 use crate::shared::constant::*;
 use crate::shared::datatype::MscReqTag;
 use crate::usb::scsi::*;
-use broccoli_core::storage::protocol::{StorageMsgId, StorageRequest, StorageResponse};
+use broccoli_core::common::storage_req::{StorageMsgId, StorageRequest, StorageResponse};
 
 // interfaceClass: 0x08 (Mass Storage)
 const MSC_INTERFACE_CLASS: u8 = 0x08;
@@ -92,22 +93,19 @@ enum DataDirection {
 
 /// Bulk Transport command status
 #[repr(u8)]
-#[derive(Debug, Copy, Clone, defmt::Format)]
+#[derive(Debug, Copy, Clone, IntoPrimitive, TryFromPrimitive, defmt::Format)]
 enum CommandBlockStatus {
     CommandPassed = 0x00,
     CommandFailed = 0x01,
     PhaseError = 0x02,
-    Reserved { value: u8 },
+
+    #[num_enum(catch_all)]
+    Reserved(u8),
 }
 
 impl CommandBlockStatus {
     fn from_u8(value: u8) -> Self {
-        match value {
-            0x00 => CommandBlockStatus::CommandPassed,
-            0x01 => CommandBlockStatus::CommandFailed,
-            0x02 => CommandBlockStatus::PhaseError,
-            _ => CommandBlockStatus::Reserved { value },
-        }
+        Self::try_from(value).unwrap_or(CommandBlockStatus::Reserved(value))
     }
 
     fn from_bool(value: bool) -> Self {
@@ -218,12 +216,7 @@ impl CommandStatusWrapperPacket {
             signature: LittleEndian::read_u32(&data[0..4]),
             tag: LittleEndian::read_u32(&data[4..8]),
             data_residue: LittleEndian::read_u32(&data[8..12]),
-            status: match data[12] {
-                0x00 => CommandBlockStatus::CommandPassed,
-                0x01 => CommandBlockStatus::CommandFailed,
-                0x02 => CommandBlockStatus::PhaseError,
-                _ => CommandBlockStatus::Reserved { value: data[12] },
-            },
+            status: CommandBlockStatus::from_u8(data[12]),
         };
         Some(packet_data)
     }
@@ -234,12 +227,7 @@ impl CommandStatusWrapperPacket {
         LittleEndian::write_u32(&mut data[0..4], self.signature);
         LittleEndian::write_u32(&mut data[4..8], self.tag);
         LittleEndian::write_u32(&mut data[8..12], self.data_residue);
-        data[12] = match self.status {
-            CommandBlockStatus::CommandPassed => 0x00,
-            CommandBlockStatus::CommandFailed => 0x01,
-            CommandBlockStatus::PhaseError => 0x02,
-            CommandBlockStatus::Reserved { value } => value,
-        };
+        data[12] = self.status.into();
         data
     }
 
@@ -517,8 +505,10 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
                 let scsi_commands = cbw_packet.get_commands();
                 let scsi_command = scsi_commands[0];
                 // コマンドごとに処理
-                let send_resp_status: Result<(), EndpointError> = match scsi_command {
-                    x if x == ScsiCommand::TestUnitReady as u8 => {
+                let send_resp_status: Result<(), EndpointError> = match ScsiCommand::try_from(
+                    scsi_command,
+                ) {
+                    Ok(ScsiCommand::TestUnitReady) => {
                         crate::trace!("Test Unit Ready");
                         // カードの抜き差しなどはないので問題無しで応答
                         Self::handle_response_single(
@@ -530,7 +520,7 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
                         )
                         .await
                     }
-                    x if x == ScsiCommand::Inquiry as u8 => {
+                    Ok(ScsiCommand::Inquiry) => {
                         crate::trace!("Inquiry");
                         // Inquiry data. resp fixed data
                         let inquiry_data = InquiryCommandData::new(
@@ -550,7 +540,7 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
                         )
                         .await
                     }
-                    x if x == ScsiCommand::ReadFormatCapacities as u8 => {
+                    Ok(ScsiCommand::ReadFormatCapacities) => {
                         crate::trace!("Read Format Capacities");
                         // Read Format Capacities data. resp fixed data
                         let read_format_capacities_data = ReadFormatCapacitiesData::new(
@@ -569,7 +559,7 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
                         )
                         .await
                     }
-                    x if x == ScsiCommand::ReadCapacity as u8 => {
+                    Ok(ScsiCommand::ReadCapacity) => {
                         crate::trace!("Read Capacity");
                         // Read Capacity data. resp fixed data
                         let read_capacity_data = ReadCapacityData::new(
@@ -588,7 +578,7 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
                         )
                         .await
                     }
-                    x if x == ScsiCommand::ModeSense6 as u8 => {
+                    Ok(ScsiCommand::ModeSense6) => {
                         crate::trace!("Mode Sense 6");
                         // Mode Sense 6 data. resp fixed data
                         let mode_sense_data = ModeSense6Data::new();
@@ -604,7 +594,7 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
                         )
                         .await
                     }
-                    x if x == ScsiCommand::RequestSense as u8 => {
+                    Ok(ScsiCommand::RequestSense) => {
                         // Error reporting
                         if latest_sense_data.is_none() {
                             latest_sense_data = Some(RequestSenseData::from(
@@ -625,7 +615,7 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
                         )
                         .await
                     }
-                    x if x == ScsiCommand::Read10 as u8 => {
+                    Ok(ScsiCommand::Read10) => {
                         // Read 10 data. resp variable data
                         let read10_data = Read10Command::from_data(scsi_commands);
                         crate::trace!("Read 10 Data: {:#x}", read10_data);
@@ -697,7 +687,7 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
                         crate::trace!("Send CSW: {:#x}", csw_packet);
                         write_ep.write(&csw_data).await
                     }
-                    x if x == ScsiCommand::Write10 as u8 => {
+                    Ok(ScsiCommand::Write10) => {
                         // Write 10 data. resp variable data
                         let write10_data = Write10Command::from_data(scsi_commands);
                         crate::trace!("Write 10 Data: {:#x}", write10_data);
@@ -767,7 +757,7 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
                         let csw_data = csw_packet.to_data();
                         write_ep.write(&csw_data).await
                     }
-                    x if x == ScsiCommand::PreventAllowMediumRemoval as u8 => {
+                    Ok(ScsiCommand::PreventAllowMediumRemoval) => {
                         crate::trace!("Prevent/Allow Medium Removal");
                         // カードの抜き差しを許可する
                         Self::handle_response_single(

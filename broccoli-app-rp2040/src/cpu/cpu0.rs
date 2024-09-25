@@ -26,10 +26,10 @@ use crate::shared::resouce::{
     CHANNEL_STORAGE_RESPONSE_TO_USB_BULK, CHANNEL_USB_BULK_TO_STORAGE_REQUEST,
 };
 use crate::usb::msc::{BulkTransferRequest, MscBulkHandler, MscBulkHandlerConfig, MscCtrlHandler};
-use broccoli_core::storage::handler_ramdisk::RamDiskHandler;
-use broccoli_core::storage::protocol::{
-    StorageMsgId, StorageRequest, StorageResponse, StorageResponseMetadata,
+use broccoli_core::common::storage_req::{
+    StorageMsgId, StorageRequest, StorageResponse, StorageResponseReport,
 };
+use broccoli_core::ramdisk_handler::RamDiskHandler;
 
 // Control Transfer -> Bulk Transfer Channel
 static CHANNEL_USB_CTRL_TO_USB_BULK: Channel<
@@ -49,7 +49,7 @@ async fn setup_storage_request_response_channel(req_tag: MscReqTag) -> usize {
 
     // setup完了時に報告された有効ブロック数をUSB Descriptorに設定する
     match setup_resp.meta_data {
-        Some(StorageResponseMetadata::ReportSetupSuccess { num_blocks }) => num_blocks,
+        Some(StorageResponseReport::ReportSetupSuccess { num_blocks }) => num_blocks,
         data => crate::panic!("Setup NG: {:?}", data),
     }
 }

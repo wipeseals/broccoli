@@ -40,21 +40,79 @@ pub const USB_PRODUCT_DEVICE_VERSION: [u8; 4] = *b"0001";
 
 /* NAND Setup */
 
+/// NAND IC count (min)
+pub const NAND_MIX_CHIP_NUM: usize = 1;
+/// NAND IC count
+pub const NAND_MAX_CHIP_NUM: usize = 2;
 /// NAND page size write requester visible
 pub const NAND_PAGE_SIZE_USABLE: usize = 2048;
 /// NAND page size metadata
-pub const NAND_PAGE_SIZE_METADATA: usize = 128;
-/// NAND page size total (usable + metadata)
-pub const NAND_TOTAL_PAGE_SIZE: usize = NAND_PAGE_SIZE_USABLE + NAND_PAGE_SIZE_METADATA;
-/// NAND page read buffer count (TOTAL_NAND_PAGE_SIZE)
-pub const NAND_PAGE_READ_BUFFER_N: usize = 8;
-/// NAND page write buffer count (TOTAL_NAND_PAGE_SIZE)
-pub const NAND_PAGE_WRITE_BUFFER_N: usize = 8;
+pub const NAND_PAGE_SIZE_SPARE: usize = 128;
+/// Total NAND Page Size (Data + Spare = 2176 bytes)
+pub const NAND_PAGE_TOTAL_SIZE: usize = NAND_PAGE_SIZE_USABLE + NAND_PAGE_SIZE_SPARE;
+
+/// Page/Block
+pub const PAGES_PER_NAND_BLOCK: usize = 64;
+/// Total Blocks per IC
+pub const MAX_NAND_BLOCKS_PER_CHIP: usize = 1024;
+/// Minimum Blocks per IC
+pub const MIN_NAND_BLOCKS_PER_CHIP: usize = 1004;
+
+/// Total Bytes per Block (2176 * 64 = 139264 bytes)
+pub const BYTES_PER_NAND_BLOCK: usize = NAND_PAGE_TOTAL_SIZE * PAGES_PER_NAND_BLOCK;
+/// Maximum Pages per IC (64 * 1024 = 65536 pages)
+pub const MAX_PAGES_PER_CHIP: usize = MAX_NAND_BLOCKS_PER_CHIP * PAGES_PER_NAND_BLOCK;
+/// Maximum Bytes per IC (139264 * 1024 = 142606336 bytes = 142.6MB)
+pub const MAX_BYTES_PER_CHIP: usize = MAX_NAND_BLOCKS_PER_CHIP * BYTES_PER_NAND_BLOCK;
+/// Minimum Pages per IC (64 * 1004 = 64256 pages)
+pub const MIN_PAGS_PER_CHIP: usize = MIN_NAND_BLOCKS_PER_CHIP * PAGES_PER_NAND_BLOCK;
+/// Minimum Bytes per IC (139264 * 1004 = 140000256 bytes = 140MB)
+pub const MIN_BYTES_PER_CHIP: usize = MIN_NAND_BLOCKS_PER_CHIP * BYTES_PER_NAND_BLOCK;
+
+/* NAND AC/Function Characteristic */
+
+/// ID read bytes (for TC58NVG0S3HTA00)
+pub const ID_READ_CMD_BYTES: usize = 5;
+/// ID read expect data (for TC58NVG0S3HTA00)
+///
+/// | Description            | Hex Data |
+/// | ---------------------- | -------- |
+/// | Maker Code             | 0x98     |
+/// | Device Code            | 0xF1     |
+/// | Chip Number, Cell Type | 0x80     |
+/// | Page Size, Block Size  | 0x15     |
+/// | District Number        | 0x72     |
+pub const ID_READ_EXPECT_DATA: [u8; ID_READ_CMD_BYTES] = [0x98, 0xF1, 0x80, 0x15, 0x72];
+
+/// Column Addressing Transfer cycles
+pub const NAND_COLUMN_TRANSFER_BYTES: usize = 2;
+/// Page(PA0~PA15) Address Transfer cycles
+pub const NAND_PAGE_TRANSFER_BYTES: usize = 2;
+/// Total Address Transfer cycles
+pub const NAND_TOTAL_ADDR_TRANSFER_BYTES: usize =
+    NAND_COLUMN_TRANSFER_BYTES + NAND_PAGE_TRANSFER_BYTES;
+/// Delay for command latch
+/// t_XXX worst (w/o t_RST) = 100ns
+pub const DELAY_US_FOR_COMMAND_LATCH: u64 = 1;
+/// Delay for reset
+/// t_RST = ~500us
+pub const DELAY_US_FOR_RESET: u64 = 500;
+/// Delay for wait busy (read)
+/// t_R=25us,, t_DCBSYR1=25us, t_DCBSYR2=30us,
+pub const DELAY_US_FOR_WAIT_BUSY_READ: u64 = 30;
+/// Delay for wait busy (write)
+/// t_PROG = 700us, t_DCBSYW2 = 700us
+pub const DELAY_US_FOR_WAIT_BUSY_WRITE: u64 = 700;
+/// Delay for wait busy (erase)
+/// t_BERASE = 5ms (5,000us)
+pub const DELAY_US_FOR_WAIT_BUSY_ERASE: u64 = 5000;
+/// Timeout limit for wait busy
+pub const TIMEOUT_LIMIT_US_FOR_WAIT_BUSY: u64 = 1_000_000;
 
 /* Debug Setup */
 
 /// Enable RAM Disk for debug
-pub const DEBUG_ENABLE_RAM_DISK: bool = true;
+pub const DEBUG_ENABLE_RAM_DISK: bool = false;
 /// USB device number of blocks (for debug)
 pub const DEBUG_RAM_DISK_NUM_BLOCKS: usize = 16;
 /// USB device total size (for debug)

@@ -1,6 +1,6 @@
-use crate::storage::protocol::StorageResponseMetadata;
+use crate::common::storage_req::StorageResponseReport;
 
-use crate::storage::protocol::{StorageHandler, StorageMsgId, StorageRequest, StorageResponse};
+use crate::common::storage_req::{StorageHandler, StorageMsgId, StorageRequest, StorageResponse};
 
 /// RAM Disk for FTL
 pub struct RamDiskHandler<const LOGICAL_BLOCK_SIZE: usize, const TOTAL_DATA_SIZE: usize> {
@@ -38,6 +38,7 @@ impl<const LOGICAL_BLOCK_SIZE: usize, const TOTAL_DATA_SIZE: usize>
 
     /// Set FAT12 Data to RAM Disk
     /// refs. https://github.com/hathach/tinyusb/blob/master/examples/device/cdc_msc/src/msc_disk.c#L52
+    #[cfg(feature = "ramdisk_sample_data")]
     #[rustfmt::skip]
     pub fn set_fat12_sample_data(&mut self) {
         let readme_contents = b"Hello, broccoli!\n";
@@ -81,7 +82,6 @@ impl<const LOGICAL_BLOCK_SIZE: usize, const TOTAL_DATA_SIZE: usize>
         );
         // lba3 readme file
         self.set_data(1536, readme_contents);
-
     }
 }
 
@@ -113,7 +113,7 @@ impl<ReqTag: Eq + PartialEq, const LOGICAL_BLOCK_SIZE: usize, const TOTAL_DATA_S
                 let ram_offset_end = ram_offset_start + LOGICAL_BLOCK_SIZE;
 
                 if ram_offset_end > self.data.len() {
-                    resp.meta_data = Some(StorageResponseMetadata::OutOfRange { lba: request.lba });
+                    resp.meta_data = Some(StorageResponseReport::OutOfRange { lba: request.lba });
                 } else {
                     // データをRAM Diskからコピー
                     resp.data
@@ -130,7 +130,7 @@ impl<ReqTag: Eq + PartialEq, const LOGICAL_BLOCK_SIZE: usize, const TOTAL_DATA_S
 
                 // 範囲外応答
                 if ram_offset_end > self.data.len() {
-                    resp.meta_data = Some(StorageResponseMetadata::OutOfRange { lba: request.lba })
+                    resp.meta_data = Some(StorageResponseReport::OutOfRange { lba: request.lba })
                 } else {
                     // データをRAM Diskにコピーしてから応答
                     self.data[ram_offset_start..ram_offset_end]
