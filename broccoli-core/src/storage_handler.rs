@@ -7,6 +7,7 @@ use crate::common::io_driver::{NandIoDriver, NandStatusReadResult};
 use crate::common::storage_req::{
     StorageHandler, StorageMsgId, StorageRequest, StorageResponse, StorageResponseReport,
 };
+use crate::nand_block::{NandBlockInfo, NandBlockState, NandBlockStats};
 
 /// Buffer Assigning Type for NandStorageHandler
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -160,133 +161,6 @@ impl<
 
 ///////////////////////////////////////////////////////////////////////////////
 
-/// NAND Block State
-#[derive(Copy, Clone, Eq, PartialEq)]
-#[repr(u8)]
-#[cfg_attr(test, derive(Debug))]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum NandBlockState {
-    /// Unknown
-    Unknown,
-    /// Not mounted
-    NotMounted,
-    /// Bad Block (Initial)
-    InitialBad,
-    /// Bad Block (Initial by other)
-    InitialBadByOtherError,
-    /// Bad Block (Erase Failed)
-    EraseFailedBad,
-    /// Bad Block (Write Failed)
-    WriteFailedBad,
-    /// Bad Block (Read Failed)
-    ReadFailedBad,
-    /// Erased Block
-    Erased,
-    /// Writting Block
-    Writing,
-    /// Written Block
-    Written,
-    /// Free Block (Reusable)
-    Free,
-
-    // TODO: Max Valueを示すエントリを置く以外の良い方法があるかもしれない
-    /// Max Value
-    MaxIndexEntry,
-}
-
-impl Default for NandBlockState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl NandBlockState {
-    /// Create a new NandBlockState
-    pub const fn new() -> Self {
-        Self::Unknown
-    }
-
-    /// Check if the block is reusable
-    pub fn is_reusable(&self) -> bool {
-        matches!(self, Self::Free)
-    }
-
-    /// Check if the block is bad
-    pub fn is_bad(&self) -> bool {
-        matches!(
-            self,
-            Self::InitialBad | Self::EraseFailedBad | Self::WriteFailedBad | Self::ReadFailedBad
-        )
-    }
-
-    /// Check if the block is bad by other error
-    pub const fn valid_entry_num() -> u8 {
-        NandBlockState::MaxIndexEntry as u8
-    }
-}
-
-/// NAND Block State
-#[derive(Copy, Clone, Eq, PartialEq)]
-#[cfg_attr(test, derive(Debug))]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct NandBlockInfo {
-    /// Block State
-    pub state: NandBlockState,
-}
-
-impl Default for NandBlockInfo {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl NandBlockInfo {
-    /// Create a new NandBlockInfo
-    pub const fn new() -> Self {
-        Self {
-            state: NandBlockState::new(),
-        }
-    }
-}
-
-#[derive(Copy, Clone, Eq, PartialEq)]
-#[cfg_attr(test, derive(Debug))]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct NandBlockStats {
-    /// Counts by State
-    counts_by_state: [u32; NandBlockState::valid_entry_num() as usize],
-}
-
-impl Default for NandBlockStats {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl NandBlockStats {
-    /// Create a new NandBlockStats
-    pub const fn new() -> Self {
-        Self {
-            counts_by_state: [0; NandBlockState::valid_entry_num() as usize],
-        }
-    }
-
-    /// Update the stats
-    pub fn update(&mut self, old_state: Option<NandBlockState>, new_state: NandBlockState) {
-        // Update the counts
-        // Unknown -> InitialBad/InitialBadByOtherError/Free 遷移時など、old_stateのカウントがいないケースが有る
-        if let Some(old_state) = old_state {
-            self.counts_by_state[old_state as usize] -= 1;
-        }
-        self.counts_by_state[new_state as usize] += 1;
-    }
-
-    /// Get the Free Block Count
-    pub fn free_count(&self) -> u32 {
-        self.counts_by_state[NandBlockState::Free as usize]
-    }
-}
-
 /// Flash Storage Controller for FTL
 pub struct NandStorageHandler<
     'd,
@@ -298,16 +172,14 @@ pub struct NandStorageHandler<
 > {
     /// NAND IO Commander
     commander: NandCommander<'d, Addr, Status, Driver, MAX_CHIP_NUM>,
+
     /// NAND Block Information
     block_infos: [[NandBlockInfo; NAND_BLOCKS_PER_CHIP]; MAX_CHIP_NUM],
-
     /// Initial Block Stats
     initial_block_stats: NandBlockStats,
     /// Current Block Stats
     current_block_stats: NandBlockStats,
     // TODO: Add NAND Map
-    // TODO: Add NAND Block Assignment
-    // TODO: Channel for NAND Controller, ...
 }
 
 impl<
@@ -329,6 +201,20 @@ impl<
         }
     }
 
+    /// Update Block State
+    fn update_block_state(&mut self, chip: usize, block: usize, new_state: NandBlockState) {
+        let old_state = self.block_infos[chip][block].state();
+        self.block_infos[chip][block].set_state(new_state);
+        self.current_block_stats.update(
+            if old_state == NandBlockState::Unknown {
+                None
+            } else {
+                Some(old_state)
+            },
+            new_state,
+        );
+    }
+
     /// Check bad block for initialization
     async fn setup_all_blocks(&mut self) -> Result<(), StorageResponseReport> {
         // setup NAND Commander(Driver)
@@ -342,20 +228,18 @@ impl<
                 match self.commander.check_badblock(addr).await {
                     Ok(is_bad) => {
                         if is_bad {
-                            self.block_infos[chip][block].state = NandBlockState::InitialBad;
-                            self.initial_block_stats
-                                .update(None, NandBlockState::InitialBad);
+                            self.update_block_state(chip, block, NandBlockState::InitialBad);
                         } else {
-                            self.block_infos[chip][block].state = NandBlockState::Free;
-                            self.initial_block_stats.update(None, NandBlockState::Free);
+                            self.update_block_state(chip, block, NandBlockState::Free);
                         }
                     }
                     Err(_) => {
                         // エラーが発生した場合は、一応BadBlockに割り当てておく
-                        self.block_infos[chip][block].state =
-                            NandBlockState::InitialBadByOtherError;
-                        self.initial_block_stats
-                            .update(None, NandBlockState::InitialBadByOtherError);
+                        self.update_block_state(
+                            chip,
+                            block,
+                            NandBlockState::InitialBadByOtherError,
+                        );
                     }
                 }
             }
@@ -363,9 +247,7 @@ impl<
         // CS1が見つからない場合、NotMountedで埋めておく
         for chip in num_cs..MAX_CHIP_NUM {
             for block in 0..NAND_BLOCKS_PER_CHIP {
-                self.block_infos[chip][block].state = NandBlockState::NotMounted;
-                self.initial_block_stats
-                    .update(None, NandBlockState::NotMounted);
+                self.update_block_state(chip, block, NandBlockState::NotMounted);
             }
         }
 
