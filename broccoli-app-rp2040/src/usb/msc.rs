@@ -621,7 +621,6 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
                         crate::trace!("Read 10 Data: {:#x}", read10_data);
                         let transfer_length = read10_data.transfer_length as usize;
 
-                        // TODO: channelに空きがある場合transfer_length分のRequest投げるTaskと、Responseを受け取るTaskのjoinにする
                         for transfer_index in 0..transfer_length {
                             let lba = read10_data.lba as usize + transfer_index;
                             let req_tag = MscReqTag::new(cbw_packet.tag, transfer_index as u32);
