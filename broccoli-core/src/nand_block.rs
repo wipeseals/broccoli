@@ -156,3 +156,51 @@ impl NandBlockStats {
         self.counts_by_state[NandBlockState::Free as usize]
     }
 }
+
+/// NAND Block Allocator/Manager
+#[derive(Copy, Clone, Eq, PartialEq)]
+#[cfg_attr(test, derive(Debug))]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct NandBlockAllocator<const MAX_CHIP_NUM: usize, const NAND_BLOCKS_PER_CHIP: usize> {
+    /// Block Infos
+    block_infos: [[NandBlockInfo; NAND_BLOCKS_PER_CHIP]; MAX_CHIP_NUM],
+    /// Initial Block Stats
+    initial_block_stats: NandBlockStats,
+    /// Current Block Stats
+    current_block_stats: NandBlockStats,
+}
+
+impl<const MAX_CHIP_NUM: usize, const NAND_BLOCKS_PER_CHIP: usize>
+    NandBlockAllocator<MAX_CHIP_NUM, NAND_BLOCKS_PER_CHIP>
+{
+    /// Create a new NandBlockAllocator
+    pub fn new() -> Self {
+        Self {
+            block_infos: [[NandBlockInfo::default(); NAND_BLOCKS_PER_CHIP]; MAX_CHIP_NUM],
+            initial_block_stats: NandBlockStats::new(),
+            current_block_stats: NandBlockStats::new(),
+        }
+    }
+
+    /// Update Block State
+    pub fn change_state(
+        &mut self,
+        chip: usize,
+        block: usize,
+        new_state: NandBlockState,
+        is_initial: bool,
+    ) {
+        let old_state = self.block_infos[chip][block].state();
+        let old_state = if old_state == NandBlockState::Unknown {
+            None
+        } else {
+            Some(old_state)
+        };
+        self.block_infos[chip][block].set_state(new_state);
+        self.current_block_stats.update(old_state, new_state);
+        // 初回だけ更新
+        if is_initial {
+            self.initial_block_stats.update(None, new_state);
+        }
+    }
+}

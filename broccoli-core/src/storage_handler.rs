@@ -7,7 +7,7 @@ use crate::common::io_driver::{NandIoDriver, NandStatusReadResult};
 use crate::common::storage_req::{
     StorageHandler, StorageMsgId, StorageRequest, StorageResponse, StorageResponseReport,
 };
-use crate::nand_block::{NandBlockInfo, NandBlockState, NandBlockStats};
+use crate::nand_block::{NandBlockAllocator, NandBlockInfo, NandBlockState, NandBlockStats};
 
 /// Flash Storage Controller for FTL
 pub struct NandStorageHandler<
@@ -22,11 +22,7 @@ pub struct NandStorageHandler<
     commander: NandCommander<'d, Addr, Status, Driver, MAX_CHIP_NUM>,
 
     /// NAND Block Information
-    block_infos: [[NandBlockInfo; NAND_BLOCKS_PER_CHIP]; MAX_CHIP_NUM],
-    /// Initial Block Stats
-    initial_block_stats: NandBlockStats,
-    /// Current Block Stats
-    current_block_stats: NandBlockStats,
+    block_allocator: NandBlockAllocator<MAX_CHIP_NUM, NAND_BLOCKS_PER_CHIP>,
     // TODO: Add NAND Map
 }
 
@@ -43,24 +39,8 @@ impl<
     pub fn new(driver: &'d mut Driver) -> Self {
         Self {
             commander: NandCommander::new(driver),
-            block_infos: [[NandBlockInfo::default(); NAND_BLOCKS_PER_CHIP]; MAX_CHIP_NUM],
-            initial_block_stats: NandBlockStats::new(),
-            current_block_stats: NandBlockStats::new(),
+            block_allocator: NandBlockAllocator::new(),
         }
-    }
-
-    /// Update Block State
-    fn update_block_state(&mut self, chip: usize, block: usize, new_state: NandBlockState) {
-        let old_state = self.block_infos[chip][block].state();
-        self.block_infos[chip][block].set_state(new_state);
-        self.current_block_stats.update(
-            if old_state == NandBlockState::Unknown {
-                None
-            } else {
-                Some(old_state)
-            },
-            new_state,
-        );
     }
 
     /// Check bad block for initialization
@@ -76,17 +56,28 @@ impl<
                 match self.commander.check_badblock(addr).await {
                     Ok(is_bad) => {
                         if is_bad {
-                            self.update_block_state(chip, block, NandBlockState::InitialBad);
+                            self.block_allocator.change_state(
+                                chip,
+                                block,
+                                NandBlockState::InitialBad,
+                                true,
+                            );
                         } else {
-                            self.update_block_state(chip, block, NandBlockState::Free);
+                            self.block_allocator.change_state(
+                                chip,
+                                block,
+                                NandBlockState::Free,
+                                true,
+                            );
                         }
                     }
                     Err(_) => {
                         // エラーが発生した場合は、一応BadBlockに割り当てておく
-                        self.update_block_state(
+                        self.block_allocator.change_state(
                             chip,
                             block,
                             NandBlockState::InitialBadByOtherError,
+                            true,
                         );
                     }
                 }
@@ -95,12 +86,10 @@ impl<
         // CS1が見つからない場合、NotMountedで埋めておく
         for chip in num_cs..MAX_CHIP_NUM {
             for block in 0..NAND_BLOCKS_PER_CHIP {
-                self.update_block_state(chip, block, NandBlockState::NotMounted);
+                self.block_allocator
+                    .change_state(chip, block, NandBlockState::NotMounted, true);
             }
         }
-
-        // initial -> current にコピー
-        self.current_block_stats = self.initial_block_stats;
 
         Ok(())
     }
@@ -111,12 +100,12 @@ impl<
         Addr: IoAddress + Copy + Clone + Eq + PartialEq,
         Status: NandStatusReadResult,
         Driver: NandIoDriver<Addr, Status>,
-        const MAX_IC_NUM: usize,
         ReqTag: Eq + PartialEq,
+        const MAX_CHIP_NUM: usize,
         const LOGICAL_BLOCK_SIZE: usize,
         const NAND_BLOCKS_PER_CHIP: usize,
     > StorageHandler<ReqTag, LOGICAL_BLOCK_SIZE>
-    for NandStorageHandler<'d, Addr, Status, Driver, MAX_IC_NUM, NAND_BLOCKS_PER_CHIP>
+    for NandStorageHandler<'d, Addr, Status, Driver, MAX_CHIP_NUM, NAND_BLOCKS_PER_CHIP>
 {
     /// Request handler
     async fn request(

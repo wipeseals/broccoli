@@ -12,7 +12,7 @@ pub struct NandCommander<
     Addr: IoAddress + Copy + Clone + Eq + PartialEq,
     Status: NandStatusReadResult,
     Driver: NandIoDriver<Addr, Status>,
-    const MAX_IC_NUM: usize,
+    const MAX_CHIP_NUM: usize,
 > {
     /// IO Driver
     driver: &'d mut Driver,
@@ -33,8 +33,8 @@ impl<
         Addr: IoAddress + Copy + Clone + Eq + PartialEq,
         Status: NandStatusReadResult,
         Driver: NandIoDriver<Addr, Status>,
-        const MAX_IC_NUM: usize,
-    > NandCommander<'d, Addr, Status, Driver, MAX_IC_NUM>
+        const MAX_CHIP_NUM: usize,
+    > NandCommander<'d, Addr, Status, Driver, MAX_CHIP_NUM>
 {
     pub fn new(driver: &'d mut Driver) -> Self {
         Self {
@@ -52,7 +52,7 @@ impl<
         self.driver.setup().await;
         self.num_cs = 0;
 
-        for i in 0..MAX_IC_NUM {
+        for i in 0..MAX_CHIP_NUM {
             let chip_index = Addr::from_chip(i as u32);
             self.driver.reset(chip_index).await;
             if !self.driver.read_id(chip_index).await {
