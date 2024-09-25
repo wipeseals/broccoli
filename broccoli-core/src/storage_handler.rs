@@ -22,7 +22,7 @@ pub struct NandStorageHandler<
     commander: NandCommander<'d, Addr, Status, Driver, MAX_CHIP_NUM>,
 
     /// NAND Block Information
-    block_allocator: NandBlockAllocator<MAX_CHIP_NUM, NAND_BLOCKS_PER_CHIP>,
+    block_allocator: NandBlockAllocator<Addr, MAX_CHIP_NUM, NAND_BLOCKS_PER_CHIP>,
     // TODO: Add NAND Map
 }
 
@@ -57,25 +57,19 @@ impl<
                     Ok(is_bad) => {
                         if is_bad {
                             self.block_allocator.change_state(
-                                chip,
-                                block,
+                                addr,
                                 NandBlockState::InitialBad,
                                 true,
                             );
                         } else {
-                            self.block_allocator.change_state(
-                                chip,
-                                block,
-                                NandBlockState::Free,
-                                true,
-                            );
+                            self.block_allocator
+                                .change_state(addr, NandBlockState::Free, true);
                         }
                     }
                     Err(_) => {
                         // エラーが発生した場合は、一応BadBlockに割り当てておく
                         self.block_allocator.change_state(
-                            chip,
-                            block,
+                            addr,
                             NandBlockState::InitialBadByOtherError,
                             true,
                         );
@@ -86,8 +80,10 @@ impl<
         // CS1が見つからない場合、NotMountedで埋めておく
         for chip in num_cs..MAX_CHIP_NUM {
             for block in 0..NAND_BLOCKS_PER_CHIP {
+                let addr = Addr::from_block(chip as u32, block as u32);
+
                 self.block_allocator
-                    .change_state(chip, block, NandBlockState::NotMounted, true);
+                    .change_state(addr, NandBlockState::NotMounted, true);
             }
         }
 

@@ -1,3 +1,5 @@
+use crate::common::io_address::IoAddress;
+
 /// NAND Block State
 #[derive(Copy, Clone, Eq, PartialEq)]
 #[repr(u8)]
@@ -158,20 +160,29 @@ impl NandBlockStats {
 }
 
 /// NAND Block Allocator/Manager
-#[derive(Copy, Clone, Eq, PartialEq)]
 #[cfg_attr(test, derive(Debug))]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct NandBlockAllocator<const MAX_CHIP_NUM: usize, const NAND_BLOCKS_PER_CHIP: usize> {
+pub struct NandBlockAllocator<
+    Addr: IoAddress + Copy + Clone + Eq + PartialEq,
+    const MAX_CHIP_NUM: usize,
+    const NAND_BLOCKS_PER_CHIP: usize,
+> {
     /// Block Infos
     info_list: [[NandBlockInfo; NAND_BLOCKS_PER_CHIP]; MAX_CHIP_NUM],
     /// Initial Block Stats
     init_stats: NandBlockStats,
     /// Current Block Stats
     now_stats: NandBlockStats,
+
+    /// PhantomData to hold the Addr type parameter
+    _phantom: core::marker::PhantomData<Addr>,
 }
 
-impl<const MAX_CHIP_NUM: usize, const NAND_BLOCKS_PER_CHIP: usize>
-    NandBlockAllocator<MAX_CHIP_NUM, NAND_BLOCKS_PER_CHIP>
+impl<
+        Addr: IoAddress + Copy + Clone + Eq + PartialEq,
+        const MAX_CHIP_NUM: usize,
+        const NAND_BLOCKS_PER_CHIP: usize,
+    > NandBlockAllocator<Addr, MAX_CHIP_NUM, NAND_BLOCKS_PER_CHIP>
 {
     /// Create a new NandBlockAllocator
     pub fn new() -> Self {
@@ -179,17 +190,15 @@ impl<const MAX_CHIP_NUM: usize, const NAND_BLOCKS_PER_CHIP: usize>
             info_list: [[NandBlockInfo::default(); NAND_BLOCKS_PER_CHIP]; MAX_CHIP_NUM],
             init_stats: NandBlockStats::new(),
             now_stats: NandBlockStats::new(),
+            _phantom: core::marker::PhantomData,
         }
     }
 
     /// Update Block State
-    pub fn change_state(
-        &mut self,
-        chip: usize,
-        block: usize,
-        new_state: NandBlockState,
-        is_initial: bool,
-    ) {
+    pub fn change_state(&mut self, addr: Addr, new_state: NandBlockState, is_initial: bool) {
+        let chip = addr.chip() as usize;
+        let block = addr.block() as usize;
+
         let old_state = self.info_list[chip][block].state();
         let old_state = if old_state == NandBlockState::Unknown {
             None
@@ -202,5 +211,20 @@ impl<const MAX_CHIP_NUM: usize, const NAND_BLOCKS_PER_CHIP: usize>
         if is_initial {
             self.init_stats.update(None, new_state);
         }
+    }
+
+    /// Allocate a Block
+    /// Return the address of the allocated block
+    /// If no block is available, return None
+    pub fn allocate(&mut self) -> Option<Addr> {
+        // 総当たりで空きブロックを探す
+        for chip in 0..MAX_CHIP_NUM {
+            for block in 0..NAND_BLOCKS_PER_CHIP {
+                if self.info_list[chip][block].state().is_reusable() {
+                    return Some(Addr::from_block(chip as u32, block as u32));
+                }
+            }
+        }
+        None
     }
 }
