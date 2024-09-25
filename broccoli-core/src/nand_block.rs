@@ -163,11 +163,11 @@ impl NandBlockStats {
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct NandBlockAllocator<const MAX_CHIP_NUM: usize, const NAND_BLOCKS_PER_CHIP: usize> {
     /// Block Infos
-    block_infos: [[NandBlockInfo; NAND_BLOCKS_PER_CHIP]; MAX_CHIP_NUM],
+    info_list: [[NandBlockInfo; NAND_BLOCKS_PER_CHIP]; MAX_CHIP_NUM],
     /// Initial Block Stats
-    initial_block_stats: NandBlockStats,
+    init_stats: NandBlockStats,
     /// Current Block Stats
-    current_block_stats: NandBlockStats,
+    now_stats: NandBlockStats,
 }
 
 impl<const MAX_CHIP_NUM: usize, const NAND_BLOCKS_PER_CHIP: usize>
@@ -176,9 +176,9 @@ impl<const MAX_CHIP_NUM: usize, const NAND_BLOCKS_PER_CHIP: usize>
     /// Create a new NandBlockAllocator
     pub fn new() -> Self {
         Self {
-            block_infos: [[NandBlockInfo::default(); NAND_BLOCKS_PER_CHIP]; MAX_CHIP_NUM],
-            initial_block_stats: NandBlockStats::new(),
-            current_block_stats: NandBlockStats::new(),
+            info_list: [[NandBlockInfo::default(); NAND_BLOCKS_PER_CHIP]; MAX_CHIP_NUM],
+            init_stats: NandBlockStats::new(),
+            now_stats: NandBlockStats::new(),
         }
     }
 
@@ -190,17 +190,17 @@ impl<const MAX_CHIP_NUM: usize, const NAND_BLOCKS_PER_CHIP: usize>
         new_state: NandBlockState,
         is_initial: bool,
     ) {
-        let old_state = self.block_infos[chip][block].state();
+        let old_state = self.info_list[chip][block].state();
         let old_state = if old_state == NandBlockState::Unknown {
             None
         } else {
             Some(old_state)
         };
-        self.block_infos[chip][block].set_state(new_state);
-        self.current_block_stats.update(old_state, new_state);
+        self.info_list[chip][block].set_state(new_state);
+        self.now_stats.update(old_state, new_state);
         // 初回だけ更新
         if is_initial {
-            self.initial_block_stats.update(None, new_state);
+            self.init_stats.update(None, new_state);
         }
     }
 }
