@@ -182,6 +182,17 @@ impl<
         Addr: IoAddress + Copy + Clone + Eq + PartialEq,
         const MAX_CHIP_NUM: usize,
         const NAND_BLOCKS_PER_CHIP: usize,
+    > Default for NandBlockAllocator<Addr, MAX_CHIP_NUM, NAND_BLOCKS_PER_CHIP>
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<
+        Addr: IoAddress + Copy + Clone + Eq + PartialEq,
+        const MAX_CHIP_NUM: usize,
+        const NAND_BLOCKS_PER_CHIP: usize,
     > NandBlockAllocator<Addr, MAX_CHIP_NUM, NAND_BLOCKS_PER_CHIP>
 {
     /// Create a new NandBlockAllocator
