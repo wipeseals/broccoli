@@ -1,4 +1,4 @@
-use crate::shared::constant::NAND_TOTAL_ADDR_TRANSFER_BYTES;
+use crate::share::constant::NAND_TOTAL_ADDR_TRANSFER_BYTES;
 use bitfield::bitfield;
 use broccoli_core::common::io_address::IoAddress;
 use byteorder::{ByteOrder, LittleEndian};

@@ -4,6 +4,7 @@
 
 pub mod commander;
 pub mod common;
+pub mod nand_block;
 pub mod storage_handler;
 
 #[cfg(feature = "ramdisk")]

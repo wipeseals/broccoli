@@ -32,8 +32,8 @@ use embassy_usb::{Builder, Config, Handler};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use static_cell::StaticCell;
 
-use crate::shared::constant::*;
-use crate::shared::datatype::MscReqTag;
+use crate::share::constant::*;
+use crate::share::datatype::MscReqTag;
 use crate::usb::scsi::*;
 use broccoli_core::common::storage_req::{StorageMsgId, StorageRequest, StorageResponse};
 
@@ -621,7 +621,6 @@ impl<'driver, 'ch, D: Driver<'driver>> MscBulkHandler<'driver, 'ch, D> {
                         crate::trace!("Read 10 Data: {:#x}", read10_data);
                         let transfer_length = read10_data.transfer_length as usize;
 
-                        // TODO: channelに空きがある場合transfer_length分のRequest投げるTaskと、Responseを受け取るTaskのjoinにする
                         for transfer_index in 0..transfer_length {
                             let lba = read10_data.lba as usize + transfer_index;
                             let req_tag = MscReqTag::new(cbw_packet.tag, transfer_index as u32);
