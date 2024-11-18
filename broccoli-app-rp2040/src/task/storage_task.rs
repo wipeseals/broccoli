@@ -1,7 +1,8 @@
-use crate::nand::fw_driver::{NandIoFwDriver, NandStatusReadBitFlags};
+use crate::nand::fw_driver::NandIoFwDriver;
 use crate::nand::nand_address::NandAddress;
 use crate::nand::nand_pins::NandIoPins;
 
+use crate::share::datatype::NandStatusReadBitFlags;
 use crate::share::{
     constant::*,
     datatype::StorageHandleDispatcher,
