@@ -1,8 +1,8 @@
-use crate::nand::nand_address::NandAddress;
+use crate::nand::address::NandAddr;
 use crate::share::constant::{NAND_PAGE_TRANSFER_BYTES, NAND_TOTAL_ADDR_TRANSFER_BYTES};
-use crate::share::datatype::NandStatusReadBitFlags;
+use crate::share::datatype::NandStatusFlags;
 use crate::{
-    nand::nand_pins::NandIoPins,
+    nand::port::NandIoPort,
     share::constant::{
         DELAY_US_FOR_COMMAND_LATCH, DELAY_US_FOR_RESET, DELAY_US_FOR_WAIT_BUSY_READ,
         ID_READ_CMD_BYTES, ID_READ_EXPECT_DATA, NAND_MAX_CHIP_NUM, TIMEOUT_LIMIT_US_FOR_WAIT_BUSY,
@@ -21,17 +21,17 @@ use embassy_time::Timer;
 
 /// NAND IC Command Driver for TC58NVG0S3HTA00 (JISC-SSD)
 pub struct NandIoFwDriver<'d> {
-    pins: NandIoPins<'d>,
+    pins: NandIoPort<'d>,
 }
 
 impl<'d> NandIoFwDriver<'d> {
     /// Create a new NandIoFwDriver
-    pub fn new(pins: NandIoPins<'d>) -> Self {
+    pub fn new(pins: NandIoPort<'d>) -> Self {
         Self { pins }
     }
 }
 
-impl<'d> NandIoDriver<NandAddress, NandStatusReadBitFlags> for NandIoFwDriver<'d> {
+impl<'d> NandIoDriver<NandAddr, NandStatusFlags> for NandIoFwDriver<'d> {
     async fn setup(&mut self) {
         self.pins.setup().await;
     }
@@ -40,7 +40,7 @@ impl<'d> NandIoDriver<NandAddress, NandStatusReadBitFlags> for NandIoFwDriver<'d
         self.pins.set_write_protect(enable).await;
     }
 
-    async fn reset(&mut self, address: NandAddress) {
+    async fn reset(&mut self, address: NandAddr) {
         let cs_index = address.chip();
         self.pins.assert_cs(cs_index).await;
         self.pins
@@ -52,7 +52,7 @@ impl<'d> NandIoDriver<NandAddress, NandStatusReadBitFlags> for NandIoFwDriver<'d
     }
 
     /// Read NAND IC ID
-    async fn read_id(&mut self, address: NandAddress) -> bool {
+    async fn read_id(&mut self, address: NandAddr) -> bool {
         let cs_index = address.chip();
         let mut id_read_results = [0x00u8; 5];
 
@@ -86,7 +86,7 @@ impl<'d> NandIoDriver<NandAddress, NandStatusReadBitFlags> for NandIoFwDriver<'d
     }
 
     /// Read NAND IC status
-    async fn read_status(&mut self, address: NandAddress) -> NandStatusReadBitFlags {
+    async fn read_status(&mut self, address: NandAddr) -> NandStatusFlags {
         let cs_index = address.chip();
         let mut status = [0x00];
 
@@ -100,13 +100,13 @@ impl<'d> NandIoDriver<NandAddress, NandStatusReadBitFlags> for NandIoFwDriver<'d
         self.pins.deassert_cs().await;
 
         defmt::trace!("Status Read: cs={}, status={:02x}", cs_index, status[0]);
-        NandStatusReadBitFlags::from_bits_truncate(status[0])
+        NandStatusFlags::from_bits_truncate(status[0])
     }
 
     /// Read NAND IC data
     async fn read_data<'data>(
         &mut self,
-        address: NandAddress,
+        address: NandAddr,
         read_data_ref: &'data mut [u8],
         read_bytes: usize,
     ) -> Result<(), NandIoError> {
@@ -150,10 +150,7 @@ impl<'d> NandIoDriver<NandAddress, NandStatusReadBitFlags> for NandIoFwDriver<'d
         }
     }
 
-    async fn erase_block(
-        &mut self,
-        address: NandAddress,
-    ) -> Result<NandStatusReadBitFlags, NandIoError> {
+    async fn erase_block(&mut self, address: NandAddr) -> Result<NandStatusFlags, NandIoError> {
         let cs_index = address.chip();
         let mut block_address_data = [0x00u8; NAND_PAGE_TRANSFER_BYTES];
         address.to_block_slice(&mut block_address_data);
@@ -197,7 +194,7 @@ impl<'d> NandIoDriver<NandAddress, NandStatusReadBitFlags> for NandIoFwDriver<'d
                     status[0]
                 );
 
-                Ok(NandStatusReadBitFlags::from_bits_truncate(status[0]))
+                Ok(NandStatusFlags::from_bits_truncate(status[0]))
             }
             Err(_) => {
                 self.pins.deassert_cs().await;
@@ -213,10 +210,10 @@ impl<'d> NandIoDriver<NandAddress, NandStatusReadBitFlags> for NandIoFwDriver<'d
 
     async fn write_data(
         &mut self,
-        address: NandAddress,
+        address: NandAddr,
         write_data_ref: &[u8],
         write_bytes: usize,
-    ) -> Result<NandStatusReadBitFlags, NandIoError> {
+    ) -> Result<NandStatusFlags, NandIoError> {
         let cs_index = address.chip();
         let mut address_data = [0x00u8; NAND_TOTAL_ADDR_TRANSFER_BYTES];
         address.to_slice(&mut address_data);
@@ -263,7 +260,7 @@ impl<'d> NandIoDriver<NandAddress, NandStatusReadBitFlags> for NandIoFwDriver<'d
                     status[0]
                 );
 
-                Ok(NandStatusReadBitFlags::from_bits_truncate(status[0]))
+                Ok(NandStatusFlags::from_bits_truncate(status[0]))
             }
             Err(_) => {
                 self.pins.deassert_cs().await;

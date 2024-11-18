@@ -25,7 +25,7 @@ use byteorder::{ByteOrder, LittleEndian};
 bitfield! {
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
     /// Chip Column Address.
-    pub struct NandAddress(u32);
+    pub struct NandAddr(u32);
     /// column address: 12+2bit 0 ~ 2176: 12bit (~ 16383: 14bit. reserved)
     pub column, set_column: 11,0;
     /// chip_id: 2bit 0 ~ 3 (実際には0,1しか使わない)
@@ -37,7 +37,7 @@ bitfield! {
     pub block, set_block: 31,22;
 }
 
-impl NandAddress {
+impl NandAddr {
     /// Create a new NandAddress
     pub fn new() -> Self {
         Self::default()
@@ -49,7 +49,7 @@ impl NandAddress {
     }
 }
 
-impl IoAddress for NandAddress {
+impl IoAddress for NandAddr {
     fn column(&self) -> u32 {
         self.column()
     }
@@ -67,14 +67,14 @@ impl IoAddress for NandAddress {
     }
 
     fn from_block(chip: u32, block: u32) -> Self {
-        let mut addr = NandAddress::default();
+        let mut addr = NandAddr::default();
         addr.set_chip(chip);
         addr.set_block(block);
         addr
     }
 
     fn from_chip(chip: u32) -> Self {
-        let mut addr = NandAddress::default();
+        let mut addr = NandAddr::default();
         addr.set_chip(chip);
         addr
     }

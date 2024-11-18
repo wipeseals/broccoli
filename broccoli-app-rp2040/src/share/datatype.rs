@@ -22,7 +22,7 @@ use broccoli_core::common::{
 /// | 7   | Write Protect          | Not Protect: 1, Protect: 0 |
 bitflags! {
     #[derive(Default, Clone, Copy, PartialEq)]
-    pub struct NandStatusReadBitFlags: u8 {
+    pub struct NandStatusFlags: u8 {
         const CHIP_STATUS0_FAIL = 0b0000_0001;
         const CHIP_STATUS1_FAIL = 0b0000_0010;
         const PAGE_BUFFER_READY = 0b0010_0000;
@@ -31,26 +31,26 @@ bitflags! {
     }
 }
 
-impl NandStatusReadBitFlags {
+impl NandStatusFlags {
     /// Check if page buffer is ready
     fn is_page_buffer_ready(&self) -> bool {
-        !(*self & NandStatusReadBitFlags::PAGE_BUFFER_READY).is_empty()
+        !(*self & NandStatusFlags::PAGE_BUFFER_READY).is_empty()
     }
 
     /// Check if data cache is ready
     pub fn is_data_cache_ready(&self) -> bool {
-        !(*self & NandStatusReadBitFlags::DATA_CACHE_READY).is_empty()
+        !(*self & NandStatusFlags::DATA_CACHE_READY).is_empty()
     }
 }
 
-impl NandStatusReadResult for NandStatusReadBitFlags {
+impl NandStatusReadResult for NandStatusFlags {
     fn is_failed(&self) -> bool {
-        (!(*self & NandStatusReadBitFlags::CHIP_STATUS0_FAIL).is_empty())
-            || (!(*self & NandStatusReadBitFlags::CHIP_STATUS1_FAIL).is_empty())
+        (!(*self & NandStatusFlags::CHIP_STATUS0_FAIL).is_empty())
+            || (!(*self & NandStatusFlags::CHIP_STATUS1_FAIL).is_empty())
     }
 
     fn is_write_protect(&self) -> bool {
-        !(*self & NandStatusReadBitFlags::WRITE_PROTECT_DISABLE).is_empty()
+        !(*self & NandStatusFlags::WRITE_PROTECT_DISABLE).is_empty()
     }
 }
 

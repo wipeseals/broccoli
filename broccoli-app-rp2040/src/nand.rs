@@ -1,4 +1,4 @@
 pub mod fw_driver;
-pub mod nand_address;
-pub mod nand_pins;
+pub mod address;
+pub mod port;
 pub mod pio_driver;

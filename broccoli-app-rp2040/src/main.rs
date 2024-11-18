@@ -17,7 +17,7 @@ use embassy_rp::gpio::{Flex, Input, Level, Output, Pull};
 use embassy_rp::multicore::{spawn_core1, Stack};
 use embassy_rp::peripherals::USB;
 use embassy_rp::usb::{Driver, InterruptHandler};
-use nand::nand_pins::NandIoPins;
+use nand::port::NandIoPort;
 use share::constant::CORE1_TASK_STACK_SIZE;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
@@ -38,7 +38,7 @@ async fn main(_spawner: Spawner) {
     defmt::info!("broccoli - Toy USB Mass Storage Device");
 
     let p = embassy_rp::init(Default::default());
-    let nandio_pins: NandIoPins = NandIoPins::new(
+    let nandio_pins: NandIoPort = NandIoPort::new(
         Flex::new(p.PIN_0),
         Flex::new(p.PIN_1),
         Flex::new(p.PIN_2),

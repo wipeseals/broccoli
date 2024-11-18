@@ -9,7 +9,7 @@ use embedded_hal_1::digital::OutputPin;
 use embedded_hal_1::digital::PinState;
 
 /// NAND I/O Pins for RP2040 (JISC-SSD)
-pub struct NandIoPins<'d> {
+pub struct NandIoPort<'d> {
     /// I/O Pins
     io0: Flex<'d>,
     io1: Flex<'d>,
@@ -29,7 +29,7 @@ pub struct NandIoPins<'d> {
     rbb: Input<'d>,
 }
 
-impl<'p> NandIoPins<'p> {
+impl<'p> NandIoPort<'p> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         io0: Flex<'p>,
