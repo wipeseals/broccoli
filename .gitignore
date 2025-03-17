@@ -1,3 +1,5 @@
+.direnv
+
 **/*.rs.bk
 **/.#*
 **/.gdb_history
