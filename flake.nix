@@ -19,6 +19,7 @@
       {
         devShells.default = mkShell {
           buildInputs = [
+            gcc-arm-embedded
             (
               rust-bin.selectLatestNightlyWith (toolchain: toolchain.default.override {
                 extensions = [ "rust-src" ];
