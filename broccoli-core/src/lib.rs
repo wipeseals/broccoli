@@ -1,4 +1,5 @@
 #![feature(never_type)]
+#![feature(generic_const_exprs)]
 #![allow(unused, dead_code)]
 #![cfg_attr(not(test), no_std)]
 

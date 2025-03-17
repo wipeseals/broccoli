@@ -7,7 +7,7 @@ use crate::common::io_driver::{NandIoDriver, NandStatusReadResult};
 use crate::common::storage_req::{
     StorageHandler, StorageMsgId, StorageRequest, StorageResponse, StorageResponseReport,
 };
-use crate::nand_block::{NandBlockAllocator, NandBlockInfo, NandBlockState, NandBlockStats};
+use crate::nand_block::NandBlockAllocator;
 
 /// Flash Storage Controller for FTL
 pub struct NandStorageHandler<
@@ -49,44 +49,7 @@ impl<
         let Ok(num_cs) = self.commander.setup().await else {
             return Err(StorageResponseReport::NandError);
         };
-        // BadBlockの情報を取得
-        for chip in 0..num_cs {
-            for block in 0..NAND_BLOCKS_PER_CHIP {
-                let addr = Addr::from_block(chip as u32, block as u32);
-                match self.commander.check_badblock(addr).await {
-                    Ok(is_bad) => {
-                        if is_bad {
-                            self.block_allocator.change_state(
-                                addr,
-                                NandBlockState::InitialBad,
-                                true,
-                            );
-                        } else {
-                            self.block_allocator
-                                .change_state(addr, NandBlockState::Free, true);
-                        }
-                    }
-                    Err(_) => {
-                        // エラーが発生した場合は、一応BadBlockに割り当てておく
-                        self.block_allocator.change_state(
-                            addr,
-                            NandBlockState::InitialBadByOtherError,
-                            true,
-                        );
-                    }
-                }
-            }
-        }
-        // CS1が見つからない場合、NotMountedで埋めておく
-        for chip in num_cs..MAX_CHIP_NUM {
-            for block in 0..NAND_BLOCKS_PER_CHIP {
-                let addr = Addr::from_block(chip as u32, block as u32);
-
-                self.block_allocator
-                    .change_state(addr, NandBlockState::NotMounted, true);
-            }
-        }
-
+        // TODO: Check if the number of NAND chips is valid
         Ok(())
     }
 }
